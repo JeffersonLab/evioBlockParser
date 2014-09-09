@@ -38,12 +38,19 @@
 static simpleEndian in_endian=SIMPLE_LITTLE_ENDIAN, out_endian=SIMPLE_LITTLE_ENDIAN;    /* Incoming and Output Endian-ness */
 static simpleDebug  simpleDebugMask=0;
 static simpleModuleConfig sModConfig[SIMPLE_MAX_MODULE_TYPES];
+/* Payload module data (fADC250, fADC125, f1TDC) */
 static int block_counter=0; /* count of blocks within the data (one per module) */
 static int slot_number[SIMPLE_MAX_NBLOCKS+1]; /* Slot number for the nth block */
 static int block_index[SIMPLE_MAX_NBLOCKS+1]; /* Index of start of block within the data */
 static int event_counter[SIMPLE_MAX_NBLOCKS+1]; /* Event counter within the block */
 static int event_index[SIMPLE_MAX_NBLOCKS+1][SIMPLE_MAX_BLOCKLEVEL+1]; /* index of start of event within block */
 static int event_length[SIMPLE_MAX_NBLOCKS+1][SIMPLE_MAX_BLOCKLEVEL+1]; /* Length of event within the block */
+/* Trigger module data (TS, TI) */
+static int trig_event_counter=0;
+static int trig_event_type[SIMPLE_MAX_BLOCKLEVEL+1];
+static int trig_event_index[SIMPLE_MAX_BLOCKLEVEL+1];
+static int trig_event_length[SIMPLE_MAX_BLOCKLEVEL+1];
+
 
 int
 simpleInit()
@@ -150,6 +157,7 @@ simpleUnblock(volatile unsigned int *data, int nwords)
 int
 simpleFirstPass(volatile unsigned int *data, int nwords)
 {
+  int rval=OK;
   int iword=0; /* Index of current word in *data */
   int data_type=0;
   int current_slot=0, block_level=0, block_number=0;
@@ -169,6 +177,7 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
 	    {
 	      printf("%s: ERROR: Undefined data type (%d). At Index %d\n",
 		     __FUNCTION__,data_type,iword);
+	      rval = ERROR:
 	    }
 	  else 
 	    {
@@ -228,6 +237,7 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
 			printf("[%3d] ERROR: blockheader slot %d != blocktrailer slot %d\n",
 			       iword,
 			       slot_number[current_block],current_slot);
+			rval = ERROR:
 		      }
 
 		    /* Check the number of words vs. words counted within the block */
@@ -236,13 +246,14 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
 			printf("[%3d] ERROR: trailer #words %d != actual #words %d\n",
 			       iword,
 			       block_words,iword-block_index[current_block]+1);
+			rval = ERROR:
 		      }
 		    break;
 		  }
 
 		case EVENT_HEADER: /* 2: EVENT HEADER */
 		  {
-		    if(simpleDebugMask & SIMPLE_SHOW_BLOCK_TRAILER)
+		    if(simpleDebugMask & SIMPLE_SHOW_EVENT_HEADER)
 		      {
 			printf("[%3d] EVENT HEADER: trigger number %d\n"
 			       ,iword,
@@ -287,10 +298,136 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
 	{
 	  printf("ERROR: Event Count (block %d): (%3d) != Event Counter (block 0): (%3d)\n",
 		 iblock, event_counter[iblock], event_counter[0]);
+	  rval = ERROR:
 	}
     }
 
-  return OK;
+  return rval;
+}
+
+/**
+ * @ingroup Unblock
+ * @brief First pass through trigger data to determine event types and indicies.
+ *
+ *    This is the default trigger first pass algorithm, if one is not specified with
+ *    simpleConfigModule.  It uses the JLab Data Format Standard
+ *
+ * @param data Memory address of the data
+ * @param nwords The number of words that comprises the data
+ *
+ * @return OK if successful, otherwise ERROR
+ */
+int
+simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
+{
+  int rval=OK;
+  int iword=0; /* Index of current word in *data */
+  int current_slot=0, block_level=0, block_number=0;
+  int evHasTimestamps=0, nevents=0;
+  int evWordCount=0;
+  int block_words=0;
+  int ievt=0;
+
+  while(iword<nwords)
+    {
+      if( ((data[iword] & DATA_TYPE_DEFINING_MASK)>>31) == 1)
+	{
+	  data_type = (data[iword] & DATA_TYPE_MASK)>>27;
+	  if(data_type>16)
+	    {
+	      printf("%s: ERROR: Undefined data type (%d). At Index %d\n",
+		     __FUNCTION__,data_type,iword);
+	      rval = ERROR:
+	    }
+	  else 
+	    {
+	      switch(data_type)
+		{
+		case BLOCK_HEADER:
+		  {
+		    current_slot = (data[iword] & BLOCK_HEADER_SLOT_MASK)>>22;
+		    block_level  = (data[iword] & BLOCK_HEADER_BLK_LVL_MASK)>>0;
+		    block_number = (data[iword] & BLOCK_HEADER_BLK_NUM_MASK)>>8;
+
+		    trig_event_counter = 0; /* Initialize the trig event counter */
+
+		    if(simpleDebugMask & SIMPLE_SHOW_BLOCK_HEADER)
+		      {
+			printf("[%3d] BLOCK HEADER: slot %2d, block_number %3d, block_level %3d\n",
+			       iword,
+			       current_slot,block_number,block_level);
+		      }
+
+		    iword++;
+		    /* Next word is the Block Header #2 */
+		    if((data[iword] & TRIG_HEADER2_ID_MASK) != TRIG_HEADER2_ID_MASK)
+		      {
+			printf("[%3d] ERROR: Invalid Trigger Blockheader #2 (0x%08x)\n",
+			       iword,
+			       data[iword]);
+			rval = ERROR:
+		      }
+		    else
+		      {
+			evHasTimestamps = (data[iword] & TRIG_HEADER2_HAS_TIMESTAMP_MASK)>>16;
+			nevents         = (data[iword] & TRIG_HEADER2_NEVENTS_MASK)>>16;
+
+			if(nevents != block_level)
+			  {
+			    printf("[%3d] ERROR: Trigger Blockheader #2 nevents (%d) != blocklevel (%d)\n",
+				   iword, nevents, block_level);
+			    rval = ERROR:
+			  }
+
+			iword++;
+			/* Now come the event data */
+			for(ievt=0; ievt<nevents; ievt++)
+			  {
+			    trig_event_type[ievt]   = (data[iword] & TRIG_EVENT_HEADER_TYPE_MASK)>>24;
+			    trig_event_length[ievt] = (data[iword] & TRIG_EVENT_HEADER_WORD_COUNT_MASK) + 1;
+			    trig_event_index[ievt]  = iword;
+
+			    iword += trig_event_length[ievt] - 1;
+
+			    if(simpleDebugMask & SIMPLE_SHOW_EVENT_HEADER)
+			      {
+				printf("[%3d] TRIG EVENT HEADER: event %3d  type %2d\n",
+				       iword,
+				       ievt,
+				       trig_event_type[ievt]);
+			      }
+			  }
+		      }
+		    break;
+		  }
+		  
+		case BLOCK_TRAILER:
+		  {
+		    current_slot = (data[iword] & BLOCK_TRAILER_SLOT_MASK)>>22;
+		    block_words  = (data[iword] & BLOCK_TRAILER_NWORDS)>>0;
+
+		    if(simpleDebugMask & SIMPLE_SHOW_BLOCK_TRAILER)
+		      {
+			printf("[%3d] TRIG BLOCK TRAILER: slot %2d, nwords %d\n",
+			       iword,
+			       current_slot,block_words);
+		      }
+		    
+		    break;
+		  }
+
+		case FILLER:
+		default:
+		  break;
+		} /* switch(data_type) */
+
+	    } /* if(data_type>16) else */
+	} /* if( ((data[iword] & DATA_TYPE_DEFINING_MASK)>>31) == 1) */
+
+      iword++;
+    } /* while(iword<nwords) */
+  
+
 }
 
 /**
@@ -309,6 +446,9 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
 int 
 simpleSecondPass(volatile unsigned int *data, int nwords)
 {
+
+  /* Loop over events */
+  
 
   return OK;
 
