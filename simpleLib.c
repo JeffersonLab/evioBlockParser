@@ -29,28 +29,62 @@
 #include <taskLib.h>
 #include <vxLib.h>
 #endif
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "jvme.h"
 #include "simpleLib.h"
 
-/* Global Variables */
-static simpleEndian in_endian=SIMPLE_LITTLE_ENDIAN, out_endian=SIMPLE_LITTLE_ENDIAN;    /* Incoming and Output Endian-ness */
-static simpleDebug  simpleDebugMask=0;
-static simpleModuleConfig sModConfig[SIMPLE_MAX_MODULE_TYPES];
-/* Payload module data (fADC250, fADC125, f1TDC) */
-static int block_counter=0; /* count of blocks within the data (one per module) */
-static int slot_number[SIMPLE_MAX_NBLOCKS+1]; /* Slot number for the nth block */
-static int block_index[SIMPLE_MAX_NBLOCKS+1]; /* Index of start of block within the data */
-static int event_counter[SIMPLE_MAX_NBLOCKS+1]; /* Event counter within the block */
-static int event_index[SIMPLE_MAX_NBLOCKS+1][SIMPLE_MAX_BLOCKLEVEL+1]; /* index of start of event within block */
-static int event_length[SIMPLE_MAX_NBLOCKS+1][SIMPLE_MAX_BLOCKLEVEL+1]; /* Length of event within the block */
-/* Trigger module data (TS, TI) */
-static int trig_event_counter=0;
-static int trig_event_type[SIMPLE_MAX_BLOCKLEVEL+1];
-static int trig_event_index[SIMPLE_MAX_BLOCKLEVEL+1];
-static int trig_event_length[SIMPLE_MAX_BLOCKLEVEL+1];
 
+/* Bank type definitions */
+#define BT_BANK_ty 0x10
+#define BT_UB1_ty  0x07
+#define BT_UI2_ty  0x05
+#define BT_UI4_ty  0x01
+
+
+/* Global Variables */
+static simpleEndian       in_endian=SIMPLE_LITTLE_ENDIAN, out_endian=SIMPLE_LITTLE_ENDIAN;    /* Incoming and Output Endian-ness */
+static simpleDebug        simpleDebugMask=0;
+static simpleModuleConfig sModConfig[SIMPLE_MAX_MODULE_TYPES];
+
+/* CODA event Bank Info */
+static codaEventBankInfo cBank[SIMPLE_MAX_BANKS];
+static int               nbanks=0;                      /* Number of banks found */
+
+/* Trigger module data (TS, TI) */
+static int      tEventCounter=0;
+static trigData tData[SIMPLE_MAX_BLOCKLEVEL+1];
+static int      tEventSyncFlag; /* Only the last event in the block will be flagged, if the block contains a syncFlag */
+
+/* Payload module data (fADC250, fADC125, f1TDC) */
+static int     blkCounter=0; /* count of blocks within the data (one per module) */
+static modData mData[SIMPLE_MAX_NBLOCKS+1];
+
+/* Structure defaults */
+const simpleModuleConfig MODULE_CONFIG_DEFAULTS = 
+  {
+    -1,   /* bank_number */
+    0,    /* module_header */
+    0xFFFFFFFF, /* header_mask */
+    (VOIDFUNCPTR)simpleFirstPass, /* firstPassRoutine */
+    (VOIDFUNCPTR)simpleSecondPass /* secondPassRoutine */
+  };
+
+const codaEventBankInfo EVENT_BANK_INFO_DEFAULTS = 
+  {
+    -1,  /* length */
+    -1,  /* ID */
+    -1   /* index */
+  };
+
+const trigData TRIG_DATA_DEFAULTS = 
+  {
+    -1, /* type */
+    -1, /* index */
+    -1, /* length */
+    -1  /* number */
+  };
 
 int
 simpleInit()
@@ -59,9 +93,7 @@ simpleInit()
 
   for(imod=0; imod<SIMPLE_MAX_MODULE_TYPES; imod++)
     {
-      sModConfig[imod].bank_number       = -1;
-      sModConfig[imod].firstPassRoutine  = NULL;
-      sModConfig[imod].secondPassRoutine = NULL;
+      sModConfig[imod] = MODULE_CONFIG_DEFAULTS;
     }
 
 
@@ -143,6 +175,69 @@ simpleUnblock(volatile unsigned int *data, int nwords)
 
 /**
  * @ingroup Unblock
+ * @brief Pass over the CODA event to determine Bank types and indicies
+ *
+ * @param data Memory address of the data
+ *
+ * @return OK if successful, otherwise ERROR
+ */
+int
+simpleScanCodaEvent(volatile unsigned int *data)
+{
+  int iword=0, nwords=0;
+  int bank_type=0;
+  int ibank=0;
+
+  /* First word should be the length of the CODA event */
+  nwords = data[iword++];
+
+  /* Next word should be the CODA Event header */
+  bank_type = (data[iword++] & 0xFF00)>>8;
+
+  switch(bank_type)
+    {
+    case BT_BANK_ty:
+      {
+	/* Determine lengths and indicies of each bank */
+	while(iword<nwords)
+	  {
+	    cBank[ibank].length = data[iword++];
+	    cBank[ibank].ID     = (data[iword++] & BANK_NUMBER_MASK)>>16;
+	    cBank[ibank].index  = iword; /* Point at first data word */
+
+	    iword += cBank[ibank].length - 1; /* Jump to next bank */
+	    ibank++;
+	  }
+	nbanks = ibank;
+	break;
+      }
+
+    case BT_UI4_ty:
+      {
+	printf("%s: ERROR: Bank type 0x%x not supported\n",
+	       __FUNCTION__,bank_type);
+	return ERROR;
+	/* If there are Lengths and Headers defined by the user, use them to find the
+	   indicies */
+	while(iword<nwords)
+	  {
+	    /* FIXME: Will do this later... */
+	  }
+
+	break;
+      }
+
+    default:
+      printf("%s: ERROR: Bank type 0x%x not supported\n",
+	     __FUNCTION__,bank_type);
+      return ERROR;
+    }
+
+  return OK;
+}
+
+/**
+ * @ingroup Unblock
  * @brief First pass through data to determine header indicies.
  *
  *    This is the default first pass algorithm, if one is not specified with
@@ -166,7 +261,7 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
   int iblock=0;
 
   /* Re-initialized block counter */
-  block_counter = 0; 
+  blkCounter = 0; 
 
   while(iword<nwords)
     {
@@ -177,7 +272,7 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
 	    {
 	      printf("%s: ERROR: Undefined data type (%d). At Index %d\n",
 		     __FUNCTION__,data_type,iword);
-	      rval = ERROR:
+	      rval = ERROR;
 	    }
 	  else 
 	    {
@@ -189,12 +284,12 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
 		    block_number = (data[iword] & BLOCK_HEADER_BLK_NUM_MASK)>>8;
 		    block_level = (data[iword] & BLOCK_HEADER_BLK_LVL_MASK)>>0;
 
-		    block_counter++; /* Increment block counter */
-		    current_block = block_counter - 1;
-		    event_counter[current_block] = 0; /* Initialize the event counter */
+		    blkCounter++; /* Increment block counter */
+		    current_block = blkCounter - 1;
+		    mData[current_block].evtCounter = 0; /* Initialize the event counter */
 
-		    slot_number[current_block] = current_slot;
-		    block_index[current_block] = iword;
+		    mData[current_block].slotNumber = current_slot;
+		    mData[current_block].blkIndex   = iword;
 
 		
 		    if(simpleDebugMask & SIMPLE_SHOW_BLOCK_HEADER)
@@ -218,35 +313,35 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
 			       current_slot,block_words);
 		      }
 		
-		    current_block = block_counter-1;
+		    current_block = blkCounter-1;
 
 		    /* Obtain the previous event length */
-		    if(event_counter[current_block] > 0)
+		    if(mData[current_block].evtCounter > 0)
 		      {
-			current_event = event_counter[current_block] - 1;
+			current_event = mData[current_block].evtCounter - 1;
 		  
-			event_length[current_block][current_event] = 
-			  iword - event_index[current_block][current_event];
+			mData[current_block].evtLength[current_event] = 
+			  iword - mData[current_block].evtIndex[current_event];
 		      }
 
 		    /* Check the slot number to make sure this block
 		       trailer is associated with the previous block
 		       header */
-		    if(current_slot != slot_number[current_block])
+		    if(current_slot != mData[current_block].slotNumber)
 		      {
 			printf("[%3d] ERROR: blockheader slot %d != blocktrailer slot %d\n",
 			       iword,
-			       slot_number[current_block],current_slot);
-			rval = ERROR:
+			       mData[current_block].slotNumber,current_slot);
+			rval = ERROR;
 		      }
 
 		    /* Check the number of words vs. words counted within the block */
-		    if(block_words != (iword - block_index[current_block]+1) )
+		    if(block_words != (iword - mData[current_block].blkIndex+1) )
 		      {
 			printf("[%3d] ERROR: trailer #words %d != actual #words %d\n",
 			       iword,
-			       block_words,iword-block_index[current_block]+1);
-			rval = ERROR:
+			       block_words,iword-mData[current_block].blkIndex+1);
+			rval = ERROR;
 		      }
 		    break;
 		  }
@@ -260,20 +355,20 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
 			       (data[iword] & EVENT_HEADER_EVT_NUM_MASK)>>0);
 
 		      }
-		    current_block = block_counter-1;
+		    current_block = blkCounter-1;
 
 		    /* Obtain the previous event length */
-		    if(event_counter[current_block] > 0)
+		    if(mData[current_block].evtCounter > 0)
 		      {
-			current_event = event_counter[current_block] - 1;
+			current_event = mData[current_block].evtCounter - 1;
 		  
-			event_length[current_block][current_event] = 
-			  iword - event_index[current_block][current_event];
+			mData[current_block].evtLength[current_event] = 
+			  iword - mData[current_block].evtIndex[current_event];
 		      }
 
-		    event_counter[current_block]++; /* increment event counter */
-		    current_event = event_counter[current_block] - 1;
-		    event_index[current_block][current_event] = iword;
+		    mData[current_block].evtCounter++; /* increment event counter */
+		    current_event = mData[current_block].evtCounter - 1;
+		    mData[current_block].evtIndex[current_event] = iword;
 
 		    break;
 		  }
@@ -292,13 +387,13 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
     } /* while(iword<nwords) */
 
   /* Check for consistent number of events for each block */
-  for(iblock=1; iblock<block_counter; iblock++)
+  for(iblock=1; iblock<blkCounter; iblock++)
     {
-      if(event_counter[iblock] != event_counter[0])
+      if(mData[iblock].evtCounter != mData[0].evtCounter)
 	{
 	  printf("ERROR: Event Count (block %d): (%3d) != Event Counter (block 0): (%3d)\n",
-		 iblock, event_counter[iblock], event_counter[0]);
-	  rval = ERROR:
+		 iblock, mData[iblock].evtCounter, mData[0].evtCounter);
+	  rval = ERROR;
 	}
     }
 
@@ -322,9 +417,9 @@ simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
 {
   int rval=OK;
   int iword=0; /* Index of current word in *data */
+  int data_type=0;
   int current_slot=0, block_level=0, block_number=0;
   int evHasTimestamps=0, nevents=0;
-  int evWordCount=0;
   int block_words=0;
   int ievt=0;
 
@@ -337,7 +432,7 @@ simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
 	    {
 	      printf("%s: ERROR: Undefined data type (%d). At Index %d\n",
 		     __FUNCTION__,data_type,iword);
-	      rval = ERROR:
+	      rval = ERROR;
 	    }
 	  else 
 	    {
@@ -349,7 +444,7 @@ simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
 		    block_level  = (data[iword] & BLOCK_HEADER_BLK_LVL_MASK)>>0;
 		    block_number = (data[iword] & BLOCK_HEADER_BLK_NUM_MASK)>>8;
 
-		    trig_event_counter = 0; /* Initialize the trig event counter */
+		    tEventCounter = 0; /* Initialize the trig event counter */
 
 		    if(simpleDebugMask & SIMPLE_SHOW_BLOCK_HEADER)
 		      {
@@ -365,7 +460,7 @@ simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
 			printf("[%3d] ERROR: Invalid Trigger Blockheader #2 (0x%08x)\n",
 			       iword,
 			       data[iword]);
-			rval = ERROR:
+			rval = ERROR;
 		      }
 		    else
 		      {
@@ -376,25 +471,26 @@ simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
 			  {
 			    printf("[%3d] ERROR: Trigger Blockheader #2 nevents (%d) != blocklevel (%d)\n",
 				   iword, nevents, block_level);
-			    rval = ERROR:
+			    rval = ERROR;
 			  }
 
 			iword++;
 			/* Now come the event data */
 			for(ievt=0; ievt<nevents; ievt++)
 			  {
-			    trig_event_type[ievt]   = (data[iword] & TRIG_EVENT_HEADER_TYPE_MASK)>>24;
-			    trig_event_length[ievt] = (data[iword] & TRIG_EVENT_HEADER_WORD_COUNT_MASK) + 1;
-			    trig_event_index[ievt]  = iword;
+			    tData[ievt].type   = (data[iword] & TRIG_EVENT_HEADER_TYPE_MASK)>>24;
+			    tData[ievt].length = (data[iword] & TRIG_EVENT_HEADER_WORD_COUNT_MASK) + 1;
+			    tData[ievt].index  = iword;
+			    tData[ievt].number = (data[iword+1] & 0xff);
 
-			    iword += trig_event_length[ievt] - 1;
+			    iword += tData[ievt].length - 1;
 
 			    if(simpleDebugMask & SIMPLE_SHOW_EVENT_HEADER)
 			      {
 				printf("[%3d] TRIG EVENT HEADER: event %3d  type %2d\n",
 				       iword,
 				       ievt,
-				       trig_event_type[ievt]);
+				       tData[ievt].type);
 			      }
 			  }
 		      }
@@ -427,8 +523,46 @@ simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
       iword++;
     } /* while(iword<nwords) */
   
-
+  return OK;
 }
+
+/* Macros for opening/closing Events and Banks. */
+#define EOPEN(bnum, btype, bSync, evnum) {				\
+    StartOfEvent = (OUTp);						\
+    *(++(OUTp)) =							\
+      ((bSync & 0x1)<<24) | ((bnum) << 16) | ((btype##_ty) << 8) | (0xff & evnum); \
+    (OUTp)++;}
+
+#define ECLOSE {							\
+    *StartOfEvent = (unsigned int) (((char *) (OUTp)) - ((char *) StartOfEvent)); \
+    if ((*StartOfEvent & 1) != 0) {					\
+      (OUTp) = ((unsigned int *)((char *) (OUTp))+1);			\
+      *StartOfEvent += 1;						\
+    };									\
+    if ((*StartOfEvent & 2) !=0) {					\
+      *StartOfEvent = *StartOfEvent + 2;				\
+      (OUTp) = ((unsigned int *)((short *) (OUTp))+1);;			\
+    };									\
+    *StartOfEvent = ( (*StartOfEvent) >> 2) - 1;};
+
+#define BOPEN(bnum, btype, code) {					\
+    unsigned int *StartOfBank;						\
+    StartOfBank = (OUTp);						\
+    *(++(OUTp)) = (((bnum) << 16) | (btype##_ty) << 8) | (code);	\
+    ((OUTp))++;
+
+#define BCLOSE								\
+  *StartOfBank = (unsigned int) (((char *) (OUTp)) - ((char *) StartOfBank)); \
+  if ((*StartOfBank & 1) != 0) {					\
+    (OUTp) = ((unsigned int *)((char *) (OUTp))+1);			\
+    *StartOfBank += 1;							\
+  };									\
+  if ((*StartOfBank & 2) !=0) {						\
+    *StartOfBank = *StartOfBank + 2;					\
+    (OUTp) = ((unsigned int *)((short *) (OUTp))+1);;			\
+  };									\
+  *StartOfBank = ( (*StartOfBank) >> 2) - 1;};
+
 
 /**
  * @ingroup Unblock
@@ -444,12 +578,28 @@ simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
  */
 
 int 
-simpleSecondPass(volatile unsigned int *data, int nwords)
+simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int in_nwords)
 {
+  int iev=0;
+  unsigned int *OUTp;
+  unsigned int *StartOfEvent;
+  int evtype=0, syncFlag=0, evnumber=0;
+
+  OUTp = (unsigned int *)&odata;
 
   /* Loop over events */
-  
+  for(iev=0; iev<tEventCounter; iev++)
+    {
+      /* Insert Trigger Bank first */
 
+      EOPEN(evtype,BT_BANK,syncFlag,evnumber);
+
+      /* Insert payload banks */
+      
+      ECLOSE;
+    }
+
+  /* Loop over events */
   return OK;
 
 }

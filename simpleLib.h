@@ -27,6 +27,10 @@
 #define SIMPLE_MAX_SLOT_NUMBER  21
 #define SIMPLE_MAX_NBLOCKS      SIMPLE_MAX_SLOT_NUMBER
 #define SIMPLE_MAX_BLOCKLEVEL  255
+#define SIMPLE_MAX_BANKS        16
+
+#define BANK_NUMBER_MASK   0xFFFF0000
+
 
 /* Standard JLab Module Data Format */
 #define DATA_TYPE_DEFINING_MASK   0x80000000
@@ -93,10 +97,46 @@ typedef enum simpleDebugType
 typedef struct ModuleProcStruct
 {
   int    bank_number;
+  unsigned int module_header;
+  unsigned int header_mask;
   void  *firstPassRoutine;
   void  *secondPassRoutine;
 } simpleModuleConfig;
 
+typedef struct CodaEventBankInfoStruct
+{
+  int length;
+  int ID;
+  int index;
+} codaEventBankInfo;
 
+typedef struct TriggerDataStruct
+{
+  int type;
+  int index;
+  int length;
+  int number;
+} trigData;
+
+typedef struct ModuleDataStruct
+{
+  int slotNumber;
+  int blkIndex;
+  int evtCounter;
+  int evtIndex[SIMPLE_MAX_BLOCKLEVEL+1];
+  int evtLength[SIMPLE_MAX_BLOCKLEVEL+1];
+} modData;
+
+
+
+int  simpleInit();
+void simpleConfigEndianInOut(int in_end, int out_end);
+void simpleConfigSetDebug(int dbMask);
+int  simpleConfigModule(int bank_number, void *firstPassRoutine, void *secondPassRoutine);
+int  simpleUnblock(volatile unsigned int *data, int nwords);
+int  simpleScanCodaEvent(volatile unsigned int *data);
+int  simpleFirstPass(volatile unsigned int *data, int nwords);
+int  simpleTriggerFirstPass(volatile unsigned int *data, int nwords);
+int  simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int in_nwords);
 
 #endif /* __SIMPLELIBH__ */

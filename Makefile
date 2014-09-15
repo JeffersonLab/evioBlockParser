@@ -28,6 +28,7 @@ LD			= ldppc
 DEFS			= -mcpu=604 -DCPU=PPC604 -DVXWORKS -D_GNU_TOOL -mlongcall \
 				-fno-for-scope -fno-builtin -fvolatile -DVXWORKSPPC
 INCS			= -I. -I$(VXWORKS_ROOT)/h -I$(VXWORKS_ROOT)/h/rpc -I$(VXWORKS_ROOT)/h/net
+
 CFLAGS			= $(INCS) $(DEFS)
 
 endif #ARCH=VXWORKSPPC#
@@ -40,7 +41,7 @@ LINUXVME_INC		?= ../include
 CC			= gcc
 AR                      = ar
 RANLIB                  = ranlib
-CFLAGS			= -I. -I${LINUXVME_INC} -I/usr/include \
+CFLAGS			= -I. -I${LINUXVME_INC} \
 			  -L. -L${LINUXVME_LIB} 
 
 LIBS			= libsimple.a
