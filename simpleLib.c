@@ -48,6 +48,9 @@ static simpleEndian       in_endian=SIMPLE_LITTLE_ENDIAN, out_endian=SIMPLE_LITT
 static simpleDebug        simpleDebugMask=0;
 static simpleModuleConfig sModConfig[SIMPLE_MAX_MODULE_TYPES];
 
+/* Trigger event number, start at 1 */
+static unsigned int simpleTriggerNumber=1;
+
 /* CODA event Bank Info */
 static codaEventBankInfo cBank[SIMPLE_MAX_BANKS];
 static int               nbanks=0;                      /* Number of banks found */
@@ -580,7 +583,7 @@ simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
 int 
 simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int in_nwords)
 {
-  int iev=0;
+  int iev=0, iblk=0, iword=0;
   unsigned int *OUTp;
   unsigned int *StartOfEvent;
   int evtype=0, syncFlag=0, evnumber=0;
@@ -590,16 +593,43 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
   /* Loop over events */
   for(iev=0; iev<tEventCounter; iev++)
     {
-      /* Insert Trigger Bank first */
 
+      /* Get the Event Type, syncFlag */
+      evtype = tData[iblk].type;
+
+      /* The sync event is the last event in the block (marked with the syncFlag) */
+      if(iblk==(blkCounter-1))
+	syncFlag = tEventSyncFlag;
+      else
+	syncFlag = 0;
+
+      evnumber = simpleTriggerNumber++;
+	  
+      /* Open the event */
       EOPEN(evtype,BT_BANK,syncFlag,evnumber);
+	  
+      /* Insert Trigger Bank first */
+      for(iword=tData[iblk].index ; iword<tData[iblk].number; iword++)
+	{
+	  *OUTp++ = idata[iword];
+	}
 
       /* Insert payload banks */
-      
-      ECLOSE;
-    }
 
-  /* Loop over events */
+      /* Loop over (modules) blocks */
+      for(iblk=0; iblk<blkCounter; iblk++)
+	{
+	  for(iword=modData[iblk].evtIndex[iev]; iword<modData[iblk].evtLength[iev]; iword++)
+	    {
+	      *OUTp++ = idata[iword];
+	    }
+	} /* Loop over (modules) blocks */
+	  
+      ECLOSE;
+
+
+    }  /* Loop over events */
+
   return OK;
 
 }
