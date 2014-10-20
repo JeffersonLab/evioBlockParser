@@ -79,7 +79,7 @@ links: $(LIBS)
 install: $(LIBS)
 	@cp -v $(PWD)/$< $(LINUXVME_LIB)/$<
 	@cp -v $(PWD)/$(<:%.a=%.so) $(LINUXVME_LIB)/$(<:%.a=%.so)
-	@cp -v ${PWD}/tiLib.h $(LINUXVME_INC)
+	@cp -v ${PWD}/*Lib.h $(LINUXVME_INC)
 
 endif
 

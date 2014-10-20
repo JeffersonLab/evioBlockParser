@@ -619,7 +619,7 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
       /* Loop over (modules) blocks */
       for(iblk=0; iblk<blkCounter; iblk++)
 	{
-	  for(iword=modData[iblk].evtIndex[iev]; iword<modData[iblk].evtLength[iev]; iword++)
+	  for(iword=mData[iblk].evtIndex[iev]; iword<mData[iblk].evtLength[iev]; iword++)
 	    {
 	      *OUTp++ = idata[iword];
 	    }
