@@ -91,7 +91,12 @@ typedef enum simpleDebugType
     SIMPLE_SHOW_BLOCK_HEADER     = (1<<0),
     SIMPLE_SHOW_BLOCK_TRAILER    = (1<<1),
     SIMPLE_SHOW_EVENT_HEADER     = (1<<2),
-    SIMPLE_SHOW_EVENT_TIMESTAMP  = (1<<3)
+    SIMPLE_SHOW_EVENT_TIMESTAMP  = (1<<3),
+    SIMPLE_SHOW_OTHER            = (1<<4),
+    SIMPLE_SHOW_BANK_FOUND       = (1<<5),
+    SIMPLE_SHOW_FILL_EVENTS      = (1<<6),
+    SIMPLE_SHOW_SECOND_PASS      = (1<<7),
+    SIMPLE_SHOW_UNBLOCK          = (1<<8),
   } simpleDebug;
 
 typedef struct ModuleProcStruct
@@ -133,10 +138,10 @@ int  simpleInit();
 void simpleConfigEndianInOut(int in_end, int out_end);
 void simpleConfigSetDebug(int dbMask);
 int  simpleConfigModule(int bank_number, void *firstPassRoutine, void *secondPassRoutine);
-int  simpleUnblock(volatile unsigned int *data, int nwords);
+int  simpleUnblock(volatile unsigned int *idata, volatile unsigned int *sdata, int nwords);
 int  simpleScanCodaEvent(volatile unsigned int *data);
-int  simpleFirstPass(volatile unsigned int *data, int nwords);
+int  simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords);
 int  simpleTriggerFirstPass(volatile unsigned int *data, int nwords);
 int  simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int in_nwords);
-
+int  simpleFillEvent(volatile unsigned int *odata, volatile unsigned int *idata);
 #endif /* __SIMPLELIBH__ */

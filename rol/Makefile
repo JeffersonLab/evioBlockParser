@@ -15,17 +15,14 @@ DEBUG=1
 #
 
 # Plug in your primary readout lists here..
-VMEROL			= unblock_test.so
+VMEROL			= unblock_test.so unblock_test_ti.so
 # Add shared library dependencies here.  (jvme, ti, are already included)
 #ROLLIBS			= 
 ROLLIBS			= -lfadc -lremex -lsimple
 
-ifndef LINUXVME_LIB
-	LINUXVME_LIB	= $CODA/extensions/linuxvme/libs
-endif
-ifndef LINUXVME_INC
-	LINUXVME_INC	= $CODA/extensions/linuxvme/include
-endif
+
+LINUXVME_LIB	?= ${CODA}/extensions/linuxvme/libs
+LINUXVME_INC	?= ${CODA}/extensions/linuxvme/include
 
 # DEFs for compiling primary readout lists
 CC			= gcc
@@ -36,14 +33,14 @@ CFLAGS			= -Wall -g
 else
 CFLAGS			= -O3
 endif
-CFLAGS			+= -w -I${LINUXVME_INC} -I. -I/usr/include -I${CODA}/common/include\
-			  -L${LINUXVME_LIB} -L. -DJLAB
+CFLAGS			+= -w -I. -I${LINUXVME_INC} -I/usr/include -I${CODA}/common/include\
+			  -L. -L${LINUXVME_LIB}  -DJLAB
 CFLAGS			+= -lrt -lpthread -ljvme -lti $(ROLLIBS)
 CFLAGS			+= -DLINUX -DDAYTIME=\""`date`"\"
 
 # DEFs for compiling CODA readout lists
 CCRL			= ${CODA_BIN}/ccrl
-CODA_INCS		= -I.  -I${LINUXVME_INC} -I${CODA}/common/include
+CODA_INCS		= -I. -I${LINUXVME_INC} -I${CODA}/common/include
 CODA_LIBDIRS            = -L. -L${LINUXVME_LIB}
 CODA_LIBS		= -ljvme -lti $(ROLLIBS)
 CODA_DEFS		= -DLINUX -DDAYTIME=\""`date`"\"
@@ -58,6 +55,17 @@ SOBJS			= $(CRLFILES:.crl=.so)
 
 
 all: $(VMEROL) $(SOBJS) 
+
+event_list_unblock_ti.c: event_list_unblock_ti.crl Makefile
+	@echo
+	@echo "Converting $< to $@"
+	@${CCRL} $<
+
+event_list_unblock_ti.so: event_list_unblock_ti.c
+	@echo
+	@echo "Building $@ from $<"
+	@echo
+	${CC} ${CODA_CFLAGS} -o $@ $<
 
 event_list_unblock.c: event_list_unblock.crl Makefile
 	@echo

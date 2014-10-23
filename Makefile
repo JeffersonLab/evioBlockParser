@@ -57,7 +57,7 @@ HDRS			= $(SRC:.c=.h)
 OBJ			= simpleLib.o
 
 ifeq ($(ARCH),Linux)
-all: echoarch $(LIBS)
+all: echoarch $(LIBS) install
 else
 all: echoarch $(OBJ)
 endif

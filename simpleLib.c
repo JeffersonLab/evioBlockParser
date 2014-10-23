@@ -64,6 +64,10 @@ static int      tEventSyncFlag; /* Only the last event in the block will be flag
 static int     blkCounter=0; /* count of blocks within the data (one per module) */
 static modData mData[SIMPLE_MAX_NBLOCKS+1];
 
+/* Output Coda Events indices and lengths */
+static codaEventBankInfo oBank[SIMPLE_MAX_BLOCKLEVEL+1];
+static int               oBlocks=0;
+
 /* Structure defaults */
 const simpleModuleConfig MODULE_CONFIG_DEFAULTS = 
   {
@@ -169,9 +173,37 @@ simpleConfigModule(int bank_number, void *firstPassRoutine, void *secondPassRout
 }
 
 int
-simpleUnblock(volatile unsigned int *data, int nwords)
+simpleUnblock(volatile unsigned int *idata, volatile unsigned int *sdata, int nwords)
 {
+  
+  /* Scan over to get initial indices.. */
+  if(simpleDebugMask & SIMPLE_SHOW_UNBLOCK)
+    {
+      printf("%s: Scan CODA Event\n",__FUNCTION__);
+    }
+  simpleScanCodaEvent(idata);
 
+  /* Perform a first pass to organize trigger event data */
+  if(simpleDebugMask & SIMPLE_SHOW_UNBLOCK)
+    {
+      printf("%s: Start trigger first pass\n",__FUNCTION__);
+    }
+  simpleTriggerFirstPass(idata, idata[-2]+1);
+
+  /* Perform a first pass to organize module event data */
+  if(simpleDebugMask & SIMPLE_SHOW_UNBLOCK)
+    {
+      printf("%s: Start module first pass\n",__FUNCTION__);
+    }
+  simpleFirstPass(idata, tData[tEventCounter-1].index + tData[tEventCounter-1].length + 1,
+		  idata[-2]+1);
+
+  /* Perform Second Pass that puts the events in a temporary buffer */
+  if(simpleDebugMask & SIMPLE_SHOW_UNBLOCK)
+    {
+      printf("%s: Start second pass\n",__FUNCTION__);
+    }
+  simpleSecondPass(sdata,idata,0);
 
   return OK;
 }
@@ -207,6 +239,14 @@ simpleScanCodaEvent(volatile unsigned int *data)
 	    cBank[ibank].length = data[iword++];
 	    cBank[ibank].ID     = (data[iword++] & BANK_NUMBER_MASK)>>16;
 	    cBank[ibank].index  = iword; /* Point at first data word */
+
+	    if(simpleDebugMask & SIMPLE_SHOW_BLOCK_HEADER)
+	      {
+		printf("[%3d] BANK %2d: Length = %d, ID = %d\n",
+		       iword, ibank,
+		       cBank[ibank].length,
+		       cBank[ibank].ID);
+	      }
 
 	    iword += cBank[ibank].length - 1; /* Jump to next bank */
 	    ibank++;
@@ -253,7 +293,7 @@ simpleScanCodaEvent(volatile unsigned int *data)
  */
 
 int
-simpleFirstPass(volatile unsigned int *data, int nwords)
+simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords)
 {
   int rval=OK;
   int iword=0; /* Index of current word in *data */
@@ -266,8 +306,11 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
   /* Re-initialized block counter */
   blkCounter = 0; 
 
+  iword = startIndex;
+
   while(iword<nwords)
     {
+      printf("%4d: 0x%08x \n",iword,data[iword]);
       if( ((data[iword] & DATA_TYPE_DEFINING_MASK)>>31) == 1)
 	{
 	  data_type = (data[iword] & DATA_TYPE_MASK)>>27;
@@ -297,7 +340,7 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
 		
 		    if(simpleDebugMask & SIMPLE_SHOW_BLOCK_HEADER)
 		      {
-			printf("[%3d] BLOCK HEADER: slot %2d, block_number %3d, block_level %3d\n",
+			printf("(%3d) BLOCK HEADER: slot %2d, block_number %3d, block_level %3d\n",
 			       iword,
 			       current_slot,block_number,block_level);
 		      }
@@ -311,7 +354,7 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
 
 		    if(simpleDebugMask & SIMPLE_SHOW_BLOCK_TRAILER)
 		      {
-			printf("[%3d] BLOCK TRAILER: slot %2d, nwords %d\n",
+			printf("(%3d) BLOCK TRAILER: slot %2d, nwords %d\n",
 			       iword,
 			       current_slot,block_words);
 		      }
@@ -332,7 +375,7 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
 		       header */
 		    if(current_slot != mData[current_block].slotNumber)
 		      {
-			printf("[%3d] ERROR: blockheader slot %d != blocktrailer slot %d\n",
+			printf("(%3d) ERROR: blockheader slot %d != blocktrailer slot %d\n",
 			       iword,
 			       mData[current_block].slotNumber,current_slot);
 			rval = ERROR;
@@ -341,7 +384,7 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
 		    /* Check the number of words vs. words counted within the block */
 		    if(block_words != (iword - mData[current_block].blkIndex+1) )
 		      {
-			printf("[%3d] ERROR: trailer #words %d != actual #words %d\n",
+			printf("(%3d) ERROR: trailer #words %d != actual #words %d\n",
 			       iword,
 			       block_words,iword-mData[current_block].blkIndex+1);
 			rval = ERROR;
@@ -353,7 +396,7 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
 		  {
 		    if(simpleDebugMask & SIMPLE_SHOW_EVENT_HEADER)
 		      {
-			printf("[%3d] EVENT HEADER: trigger number %d\n"
+			printf("(%3d) EVENT HEADER: trigger number %d\n"
 			       ,iword,
 			       (data[iword] & EVENT_HEADER_EVT_NUM_MASK)>>0);
 
@@ -378,7 +421,10 @@ simpleFirstPass(volatile unsigned int *data, int nwords)
 	      
 		default:
 		  /* Ignore all other data types for now */
-		  continue;
+		    if(simpleDebugMask & SIMPLE_SHOW_EVENT_HEADER)
+		      {
+			printf("(%3d) OTHER: 0x%08x\n",iword,data[iword]);
+		      }
 		} /* switch(data_type) */
 
 	    } /* if(data_type>16) {} else */
@@ -451,8 +497,8 @@ simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
 
 		    if(simpleDebugMask & SIMPLE_SHOW_BLOCK_HEADER)
 		      {
-			printf("[%3d] BLOCK HEADER: slot %2d, block_number %3d, block_level %3d\n",
-			       iword,
+			printf("[%3d] %08x BLOCK HEADER: slot %2d, block_number %3d, block_level %3d\n",
+			       iword,data[iword],
 			       current_slot,block_number,block_level);
 		      }
 
@@ -468,12 +514,13 @@ simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
 		    else
 		      {
 			evHasTimestamps = (data[iword] & TRIG_HEADER2_HAS_TIMESTAMP_MASK)>>16;
-			nevents         = (data[iword] & TRIG_HEADER2_NEVENTS_MASK)>>16;
+			nevents         = (data[iword] & TRIG_HEADER2_NEVENTS_MASK);
 
 			if(nevents != block_level)
 			  {
-			    printf("[%3d] ERROR: Trigger Blockheader #2 nevents (%d) != blocklevel (%d)\n",
-				   iword, nevents, block_level);
+			    printf("[%3d] %08x ERROR: Trigger Blockheader #2 nevents (%d) != blocklevel (%d)\n",
+				   iword, data[iword],
+				   nevents, block_level);
 			    rval = ERROR;
 			  }
 
@@ -486,15 +533,16 @@ simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
 			    tData[ievt].index  = iword;
 			    tData[ievt].number = (data[iword+1] & 0xff);
 
-			    iword += tData[ievt].length - 1;
-
 			    if(simpleDebugMask & SIMPLE_SHOW_EVENT_HEADER)
 			      {
-				printf("[%3d] TRIG EVENT HEADER: event %3d  type %2d\n",
-				       iword,
+				printf("[%3d] %08x TRIG EVENT HEADER: event %3d  type %2d, number = %d\n",
+				       iword, data[iword],
 				       ievt,
-				       tData[ievt].type);
+				       tData[ievt].type,
+				       tData[ievt].number);
 			      }
+			    iword += tData[ievt].length;
+			    tEventCounter++;
 			  }
 		      }
 		    break;
@@ -507,8 +555,8 @@ simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
 
 		    if(simpleDebugMask & SIMPLE_SHOW_BLOCK_TRAILER)
 		      {
-			printf("[%3d] TRIG BLOCK TRAILER: slot %2d, nwords %d\n",
-			       iword,
+			printf("[%3d] %08x TRIG BLOCK TRAILER: slot %2d, nwords %d\n",
+			       iword, data[iword],
 			       current_slot,block_words);
 		      }
 		    
@@ -526,27 +574,27 @@ simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
       iword++;
     } /* while(iword<nwords) */
   
-  return OK;
+  return rval;
 }
 
 /* Macros for opening/closing Events and Banks. */
 #define EOPEN(bnum, btype, bSync, evnum) {				\
-    StartOfEvent = (OUTp);						\
+    StartOfTrigEvent = (OUTp);						\
     *(++(OUTp)) =							\
       ((bSync & 0x1)<<24) | ((bnum) << 16) | ((btype##_ty) << 8) | (0xff & evnum); \
     (OUTp)++;}
 
 #define ECLOSE {							\
-    *StartOfEvent = (unsigned int) (((char *) (OUTp)) - ((char *) StartOfEvent)); \
-    if ((*StartOfEvent & 1) != 0) {					\
+    *StartOfTrigEvent = (unsigned int) (((char *) (OUTp)) - ((char *) StartOfTrigEvent)); \
+    if ((*StartOfTrigEvent & 1) != 0) {					\
       (OUTp) = ((unsigned int *)((char *) (OUTp))+1);			\
-      *StartOfEvent += 1;						\
+      *StartOfTrigEvent += 1;						\
     };									\
-    if ((*StartOfEvent & 2) !=0) {					\
-      *StartOfEvent = *StartOfEvent + 2;				\
+    if ((*StartOfTrigEvent & 2) !=0) {					\
+      *StartOfTrigEvent = *StartOfTrigEvent + 2;				\
       (OUTp) = ((unsigned int *)((short *) (OUTp))+1);;			\
     };									\
-    *StartOfEvent = ( (*StartOfEvent) >> 2) - 1;};
+    *StartOfTrigEvent = ( (*StartOfTrigEvent) >> 2) - 1;};
 
 #define BOPEN(bnum, btype, code) {					\
     unsigned int *StartOfBank;						\
@@ -583,22 +631,24 @@ simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
 int 
 simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int in_nwords)
 {
-  int iev=0, iblk=0, iword=0;
+  int iev=0, iblk=0, iword=0, nOUT=0;
   unsigned int *OUTp;
-  unsigned int *StartOfEvent;
+  unsigned int *StartOfTrigEvent;
   int evtype=0, syncFlag=0, evnumber=0;
 
-  OUTp = (unsigned int *)&odata;
+  OUTp = (unsigned int *)&odata[0];
+
+  oBlocks = 0;
 
   /* Loop over events */
   for(iev=0; iev<tEventCounter; iev++)
     {
 
       /* Get the Event Type, syncFlag */
-      evtype = tData[iblk].type;
+      evtype = tData[iev].type;
 
       /* The sync event is the last event in the block (marked with the syncFlag) */
-      if(iblk==(blkCounter-1))
+      if(iev==(blkCounter-1))
 	syncFlag = tEventSyncFlag;
       else
 	syncFlag = 0;
@@ -606,30 +656,86 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
       evnumber = simpleTriggerNumber++;
 	  
       /* Open the event */
-      EOPEN(evtype,BT_BANK,syncFlag,evnumber);
-	  
+      evtype &= 0xF; /* CODA2 event type limit */
+/*       if(evtype==0) evtype = 0xF; /\* Make sure these get through too *\/ */
+      EOPEN(evtype,BT_UI4,syncFlag,tData[iev].number);
+      
       /* Insert Trigger Bank first */
-      for(iword=tData[iblk].index ; iword<tData[iblk].number; iword++)
+      if(simpleDebugMask & SIMPLE_SHOW_SECOND_PASS)
 	{
+	  printf("%s: %5d  Out Data.. index = %d  length = %d\n",__FUNCTION__,
+		 tData[iev].number,
+		 tData[iev].index,
+		 tData[iev].length);
+	}
+      oBank[iev].index = nOUT;
+
+      for(iword=tData[iev].index ; iword<(tData[iev].index+tData[iev].length); iword++)
+	{
+	  if(simpleDebugMask & SIMPLE_SHOW_SECOND_PASS)
+	    {
+	      printf("Trig Data  %5d: 0x%08x\n",iword,idata[iword]);
+	    }
 	  *OUTp++ = idata[iword];
 	}
-
+      
       /* Insert payload banks */
-
+      
       /* Loop over (modules) blocks */
       for(iblk=0; iblk<blkCounter; iblk++)
 	{
 	  for(iword=mData[iblk].evtIndex[iev]; iword<mData[iblk].evtLength[iev]; iword++)
 	    {
+	      if(simpleDebugMask & SIMPLE_SHOW_SECOND_PASS)
+		{
+		  printf("Mod  Data  %5d: 0x%08x\n",iword,idata[iword]);
+		}
 	      *OUTp++ = idata[iword];
 	    }
 	} /* Loop over (modules) blocks */
-	  
-      ECLOSE;
 
+      ECLOSE;
+      nOUT += oBank[iev].length = (*StartOfTrigEvent)+1;
+
+      oBlocks++;
+
+      if(simpleDebugMask & SIMPLE_SHOW_SECOND_PASS)
+	{
+	  printf("oBank %d index = %d   length = %d   nOUT = %d\n",
+		 iev, oBank[iev].index, oBank[iev].length, nOUT);
+	}
 
     }  /* Loop over events */
+  
+  return nOUT;
 
-  return OK;
+}
 
+int
+simpleFillEvent(volatile unsigned int *odata, volatile unsigned int *idata)
+{
+  int nwords=0, iev=0, eob=0;
+  static int currentEventOfBlock=0;
+  
+  if(currentEventOfBlock == oBlocks)
+    currentEventOfBlock = 0;
+
+  eob = currentEventOfBlock;
+  
+
+  for(iev=oBank[eob].index; iev < (oBank[eob].index + oBank[eob].length); iev++)
+    {
+      if(simpleDebugMask & SIMPLE_SHOW_FILL_EVENTS)
+	{
+	  printf("%s: %d  %d   data = 0x%08x\n",__FUNCTION__,eob,iev,idata[iev]);
+	}
+      odata[nwords++] = idata[iev];
+    }
+
+  if(nwords==0)
+    return 0;
+  
+  currentEventOfBlock++;
+
+  return nwords;
 }

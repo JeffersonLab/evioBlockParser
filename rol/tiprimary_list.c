@@ -60,7 +60,7 @@ extern DMANODE *the_event;
 /*! Data pointer */
 extern unsigned int *dma_dabufp;
 
-
+int blocklev;
 int chuck=0;
 
 #define ISR_INTLOCK INTLOCK
@@ -263,12 +263,13 @@ static void __end()
 	  break;
 	}
       if(getOutQueueCount()>0)
-	__poll();
+	{
+	  __poll();
+	}
       else
 	break;
     }
   printf("secondary __poll loops %d\n",iwait++);
-
 
   tiStatus(0);
   dmaPStatsAll();
@@ -280,27 +281,6 @@ static void __end()
 
   CDODISABLE(TIPRIMARY,1,0);
  
-  /* we need to make sure all events taken by the
-     VME are collected from the vmeOUT queue */
-
-
-
-/*   rem_count = getOutQueueCount(); */
-/*   if (rem_count > 0) */
-/*     { */
-/* /\*       chuck=1; *\/ */
-/*       printf("tiprimary_list End: %d events left on vmeOUT queue (will now de-queue them)\n",rem_count); */
-/*       /\* This wont work without a secondary readout list (will crash EB or hang the ROC) *\/ */
-/*       for(ii=0;ii<rem_count;ii++) */
-/* 	{ */
-/* 	  __poll(); */
-/* 	} */
-/*     } */
-/*   else */
-/*     { */
-/*       printf("tiprimary_list End: vmeOUT queue Empty\n"); */
-/*     } */
-
   dmaPStatsAll();
       
   daLogMsg("INFO","End Executed");
@@ -335,7 +315,7 @@ static void __go()
 void usrtrig(unsigned long EVTYPE,unsigned long EVSOURCE)
 {
   long EVENT_LENGTH;
-  int ii, len, data, blocklev=0, lock_key;
+  int ii, len, data, lock_key;
   int syncFlag=0, lateFail=0;
   unsigned int event_number=0;
   unsigned int currentWord=0;
@@ -355,7 +335,7 @@ void usrtrig(unsigned long EVTYPE,unsigned long EVSOURCE)
       blocklev = outEvent->type;
       event_number = outEvent->nevent;
 
-      CEOPEN(1, BT_BANK);
+      UEOPEN(0xfc01 | 0,BT_BANK,event_number);
 
       if(rol->dabufp != NULL) 
 	{
@@ -383,16 +363,16 @@ void usrtrig(unsigned long EVTYPE,unsigned long EVSOURCE)
 	  printf("tiprimary_list: ERROR rol->dabufp is NULL -- Event lost\n");
 	}
 
-      CECLOSE;
+      UECLOSE;
 
-      /* Add some "User" Events of type 0xFE00 + event of block 
-	 to help trigger the secondary readout list for every trigger */
       for(ii=1; ii<blocklev; ii++)
 	{
-	  UEOPEN(0xfe00 | ii,BT_BANK,0);
+	  UEOPEN(0xfe00 | ii,BT_BANK,event_number);
 	  UECLOSE;
 	}
 
+      /* Add some "User" Events of type 0xFE00 + event of block 
+	 to help trigger the secondary readout list for every trigger */
       if(chuck==1)
 	printf("%s: before ACKLOCK\n",__FUNCTION__);
       ACKLOCK;
