@@ -76,7 +76,8 @@ typedef enum jlabModuleTypes
     MODID_TS = 5,
     MODID_TD = 6,
     MODID_SSP = 7,
-    MODID_JLAB_DISC = 8
+    MODID_JLAB_DISC = 8,
+    MAX_MODID
   } ModuleID;
 
 typedef enum simpleEndianType
@@ -101,6 +102,7 @@ typedef enum simpleDebugType
 
 typedef struct ModuleProcStruct
 {
+  int    type;
   int    bank_number;
   unsigned int module_header;
   unsigned int header_mask;
@@ -137,11 +139,11 @@ typedef struct ModuleDataStruct
 int  simpleInit();
 void simpleConfigEndianInOut(int in_end, int out_end);
 void simpleConfigSetDebug(int dbMask);
-int  simpleConfigModule(int bank_number, void *firstPassRoutine, void *secondPassRoutine);
+int  simpleConfigModule(int type, int bank_number, void *firstPassRoutine, void *secondPassRoutine);
 int  simpleUnblock(volatile unsigned int *idata, volatile unsigned int *sdata, int nwords);
 int  simpleScanCodaEvent(volatile unsigned int *data);
 int  simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords);
-int  simpleTriggerFirstPass(volatile unsigned int *data, int nwords);
+int  simpleTriggerFirstPass(volatile unsigned int *data, int start_index, int nwords);
 int  simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int in_nwords);
 int  simpleFillEvent(volatile unsigned int *odata, volatile unsigned int *idata);
 #endif /* __SIMPLELIBH__ */

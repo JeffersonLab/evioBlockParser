@@ -53,7 +53,16 @@ static unsigned int simpleTriggerNumber=1;
 
 /* CODA event Bank Info */
 static codaEventBankInfo cBank[SIMPLE_MAX_BANKS];
+static unsigned int      cBankMask=0;
+static unsigned int      cTriggerBank=0;
 static int               nbanks=0;                      /* Number of banks found */
+
+
+/* User defined Banks for separate modules */
+static simpleModuleConfig mConf[SIMPLE_MAX_BANKS];
+static unsigned int       mConfMask=0;
+static unsigned int       mTriggerBankMask=0;
+static int                nmconfs=0;
 
 /* Trigger module data (TS, TI) */
 static int      tEventCounter=0;
@@ -71,6 +80,7 @@ static int               oBlocks=0;
 /* Structure defaults */
 const simpleModuleConfig MODULE_CONFIG_DEFAULTS = 
   {
+    -1,   /* type */
     -1,   /* bank_number */
     0,    /* module_header */
     0xFFFFFFFF, /* header_mask */
@@ -166,8 +176,25 @@ simpleConfigSetDebug(int dbMask)
  */
 
 int
-simpleConfigModule(int bank_number, void *firstPassRoutine, void *secondPassRoutine)
+simpleConfigModule(int type, int bank_number, void *firstPassRoutine, void *secondPassRoutine)
 {
+  if(type>=MAX_MODID)
+    {
+      printf("%s: ERROR: Invalid type (%d)\n",__FUNCTION__,type);
+      return ERROR;
+    }
+
+  mConf[nmconfs].bank_number       = bank_number;
+  mConf[nmconfs].type              = type;
+  mConf[nmconfs].firstPassRoutine  = firstPassRoutine;
+  mConf[nmconfs].secondPassRoutine = secondPassRoutine;
+
+  mConfMask |= (1<<bank_number);
+
+  if((type==MODID_TI) || (type==MODID_TS))
+    mTriggerBankMask |= (1<<bank_number);
+  
+  nmconfs++;
 
   return OK;
 }
@@ -188,15 +215,17 @@ simpleUnblock(volatile unsigned int *idata, volatile unsigned int *sdata, int nw
     {
       printf("%s: Start trigger first pass\n",__FUNCTION__);
     }
-  simpleTriggerFirstPass(idata, idata[-2]+1);
+  /* Just pass the trigger bank */
+  /* FIXME: Bank is hard-coded for now */
+  simpleTriggerFirstPass(idata, cBank[1].index, cBank[1].length);
 
   /* Perform a first pass to organize module event data */
   if(simpleDebugMask & SIMPLE_SHOW_UNBLOCK)
     {
       printf("%s: Start module first pass\n",__FUNCTION__);
     }
-  simpleFirstPass(idata, tData[tEventCounter-1].index + tData[tEventCounter-1].length + 1,
-		  idata[-2]+1);
+  simpleFirstPass(idata, cBank[2].index,
+		  cBank[2].length);
 
   /* Perform Second Pass that puts the events in a temporary buffer */
   if(simpleDebugMask & SIMPLE_SHOW_UNBLOCK)
@@ -223,6 +252,8 @@ simpleScanCodaEvent(volatile unsigned int *data)
   int bank_type=0;
   int ibank=0;
 
+  cBankMask = 0;
+
   /* First word should be the length of the CODA event */
   nwords = data[iword++];
 
@@ -240,10 +271,18 @@ simpleScanCodaEvent(volatile unsigned int *data)
 	    cBank[ibank].ID     = (data[iword++] & BANK_NUMBER_MASK)>>16;
 	    cBank[ibank].index  = iword; /* Point at first data word */
 
+	    /* Add to the mask of banks found */
+	    cBankMask |= (1<<(cBank[ibank].ID));
+
+	    /* Check to see if this bank was user defined to be a trigger bank */
+	    if((1<<cBank[ibank].ID) & mTriggerBankMask)
+	      cTriggerBank = cBank[ibank].ID;
+
 	    if(simpleDebugMask & SIMPLE_SHOW_BLOCK_HEADER)
 	      {
-		printf("[%3d] BANK %2d: Length = %d, ID = %d\n",
-		       iword, ibank,
+		printf("[%3d  0x%08x] BANK %2d: Length = %d, ID = %d\n",
+		       iword, data[cBank[ibank].index-2],
+		       ibank,
 		       cBank[ibank].length,
 		       cBank[ibank].ID);
 	      }
@@ -307,6 +346,7 @@ simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords)
   blkCounter = 0; 
 
   iword = startIndex;
+  nwords += startIndex;
 
   while(iword<nwords)
     {
@@ -462,7 +502,7 @@ simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords)
  * @return OK if successful, otherwise ERROR
  */
 int
-simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
+simpleTriggerFirstPass(volatile unsigned int *data, int start_index, int nwords)
 {
   int rval=OK;
   int iword=0; /* Index of current word in *data */
@@ -471,6 +511,9 @@ simpleTriggerFirstPass(volatile unsigned int *data, int nwords)
   int evHasTimestamps=0, nevents=0;
   int block_words=0;
   int ievt=0;
+
+  iword = start_index;
+  nwords += start_index;
 
   while(iword<nwords)
     {
@@ -658,7 +701,7 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
       /* Open the event */
       evtype &= 0xF; /* CODA2 event type limit */
 /*       if(evtype==0) evtype = 0xF; /\* Make sure these get through too *\/ */
-      EOPEN(evtype,BT_UI4,syncFlag,tData[iev].number);
+      EOPEN(evtype,BT_BANK,syncFlag,tData[iev].number);
       
       /* Insert Trigger Bank first */
       if(simpleDebugMask & SIMPLE_SHOW_SECOND_PASS)
@@ -670,7 +713,11 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
 	}
       oBank[iev].index = nOUT;
 
-      for(iword=tData[iev].index ; iword<(tData[iev].index+tData[iev].length); iword++)
+      // FIXME: Hard coded trigger bank for now
+      BOPEN(5, BT_UI4, 0);
+      for(iword=tData[iev].index; 
+	  iword<(tData[iev].index+tData[iev].length); 
+	  iword++)
 	{
 	  if(simpleDebugMask & SIMPLE_SHOW_SECOND_PASS)
 	    {
@@ -678,13 +725,18 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
 	    }
 	  *OUTp++ = idata[iword];
 	}
-      
+      BCLOSE;
+
       /* Insert payload banks */
       
       /* Loop over (modules) blocks */
+      // FIXME: Hard coded payload bank for now
+      BOPEN(4, BT_UI4, 0);
       for(iblk=0; iblk<blkCounter; iblk++)
 	{
-	  for(iword=mData[iblk].evtIndex[iev]; iword<mData[iblk].evtLength[iev]; iword++)
+	  for(iword=mData[iblk].evtIndex[iev];
+	      iword<(mData[iblk].evtIndex[iev]+mData[iblk].evtLength[iev]); 
+	      iword++)
 	    {
 	      if(simpleDebugMask & SIMPLE_SHOW_SECOND_PASS)
 		{
@@ -693,6 +745,7 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
 	      *OUTp++ = idata[iword];
 	    }
 	} /* Loop over (modules) blocks */
+      BCLOSE;
 
       ECLOSE;
       nOUT += oBank[iev].length = (*StartOfTrigEvent)+1;

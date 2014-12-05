@@ -15,7 +15,7 @@ DEBUG=1
 #
 
 # Plug in your primary readout lists here..
-VMEROL			= unblock_test.so unblock_test_ti.so
+VMEROL			= unblock_test.so unblock_test_ti.so unblock_test_fadc.so
 # Add shared library dependencies here.  (jvme, ti, are already included)
 #ROLLIBS			= 
 ROLLIBS			= -lfadc -lremex -lsimple
