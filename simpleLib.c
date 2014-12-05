@@ -350,7 +350,6 @@ simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords)
 
   while(iword<nwords)
     {
-      printf("%4d: 0x%08x \n",iword,data[iword]);
       if( ((data[iword] & DATA_TYPE_DEFINING_MASK)>>31) == 1)
 	{
 	  data_type = (data[iword] & DATA_TYPE_MASK)>>27;

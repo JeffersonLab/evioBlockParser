@@ -35,7 +35,7 @@ begin download
     SIMPLE_SHOW_BANK_FOUND |
     SIMPLE_SHOW_SECOND_PASS;
 
-/*   debugFlags = 0; */
+  debugFlags = 0;
 
   simpleConfigSetDebug(debugFlags);
 

@@ -6,12 +6,13 @@
  *
  */
 
-#define BLOCKLEVEL  2
-#define BUFFERLEVEL 3
+#define BLOCKLEVEL 70
+#define BUFFERLEVEL 10
+#define BLOCKLIMIT  0
 
 /* Event Buffer definitions */
 #define MAX_EVENT_POOL     10*BLOCKLEVEL  /* Should be at least BLOCKLEVEL*BUFFERLEVEL */
-#define MAX_EVENT_LENGTH   1024*40        /* Size in Bytes */
+#define MAX_EVENT_LENGTH   4*BLOCKLEVEL*500        /* Size in Bytes */
 
 /* Define Interrupt source and address */
 #define TI_MASTER
@@ -115,7 +116,7 @@ rocDownload()
 
   tiSetBlockBufferLevel(BUFFERLEVEL);
 
-  tiSetBlockLimit(1);
+  tiSetBlockLimit(BLOCKLIMIT);
 
   tiStatus(0);
 
@@ -199,9 +200,9 @@ rocGo()
 	 __FUNCTION__,tiGetCurrentBlockLevel());
 
   if(usePulser) {
-    /* tsSetRandomTrigger(1,0x7); */
+    tiSetRandomTrigger(1,0x6);
     /* Software trigger - large range */
-    tiSoftTrig(1,200,0x7fff,1);
+/*     tiSoftTrig(1,200,0x7fff,1); */
   }    
   /* Use this info to change block level is all modules */
 
@@ -257,7 +258,7 @@ rocTrigger(int evnum)
   BANKOPEN(4,BT_UI4,0);
 
   vmeDmaConfig(2,5,1); 
-  dCnt = tiReadBlock(dma_dabufp,8+(3*BLOCKLEVEL),1);
+  dCnt = tiReadBlock(dma_dabufp,80+(3*BLOCKLEVEL),1);
   if(dCnt<=0)
     {
       printf("No data or error.  dCnt = %d\n",dCnt);
@@ -274,7 +275,7 @@ rocTrigger(int evnum)
   BANKOPEN(3,BT_UI4,0);
 
   /* Check for valid data here */
-  for(ii=0;ii<100;ii++) 
+  for(ii=0;ii<1000;ii++) 
     {
       datascan = faBready(faSlot(0));
       if (datascan>0) 
@@ -285,7 +286,7 @@ rocTrigger(int evnum)
 
   if(datascan>0) 
     {
-      nwords = faReadBlock(faSlot(0),dma_dabufp,5000,1);
+      nwords = faReadBlock(faSlot(0),dma_dabufp,200*BLOCKLEVEL,1);
     
       if(nwords < 0) 
 	{
