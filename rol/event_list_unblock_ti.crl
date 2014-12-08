@@ -27,15 +27,22 @@ begin download
   int debugFlags = 0;
   simpleInit();
 
-  debugFlags = 
-    SIMPLE_SHOW_BLOCK_HEADER |
-    SIMPLE_SHOW_BLOCK_TRAILER |
-    SIMPLE_SHOW_EVENT_HEADER |
-    SIMPLE_SHOW_EVENT_TIMESTAMP |
-    SIMPLE_SHOW_BANK_FOUND |
-    SIMPLE_SHOW_SECOND_PASS;
+  simpleConfigIgnoreUndefinedBlocks(1);
 
-  debugFlags = 0;
+  simpleConfigModule(MODID_TI, 4, NULL,NULL);
+  simpleConfigModule(MODID_FA250,3, NULL,NULL);
+
+  debugFlags = 
+/*     SIMPLE_SHOW_BLOCK_HEADER | */
+/*     SIMPLE_SHOW_BLOCK_TRAILER | */
+/*     SIMPLE_SHOW_EVENT_HEADER | */
+/*     SIMPLE_SHOW_EVENT_TIMESTAMP | */
+/*     SIMPLE_SHOW_BANK_FOUND | */
+/*     SIMPLE_SHOW_SECOND_PASS | */
+    SIMPLE_SHOW_IGNORED_BANKS |
+    0;
+
+/*   debugFlags = 0; */
 
   simpleConfigSetDebug(debugFlags);
 

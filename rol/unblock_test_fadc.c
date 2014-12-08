@@ -6,9 +6,9 @@
  *
  */
 
-#define BLOCKLEVEL 70
+#define BLOCKLEVEL 10
 #define BUFFERLEVEL 10
-#define BLOCKLIMIT  0
+#define BLOCKLIMIT  1
 
 /* Event Buffer definitions */
 #define MAX_EVENT_POOL     10*BLOCKLEVEL  /* Should be at least BLOCKLEVEL*BUFFERLEVEL */

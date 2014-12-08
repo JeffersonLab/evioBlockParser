@@ -77,6 +77,8 @@ typedef enum jlabModuleTypes
     MODID_TD = 6,
     MODID_SSP = 7,
     MODID_JLAB_DISC = 8,
+    MODID_OTHER = 9,
+    MODID_OTHER_NOBLOCKS = 10,
     MAX_MODID
   } ModuleID;
 
@@ -98,6 +100,7 @@ typedef enum simpleDebugType
     SIMPLE_SHOW_FILL_EVENTS      = (1<<6),
     SIMPLE_SHOW_SECOND_PASS      = (1<<7),
     SIMPLE_SHOW_UNBLOCK          = (1<<8),
+    SIMPLE_SHOW_IGNORED_BANKS    = (1<<9)
   } simpleDebug;
 
 typedef struct ModuleProcStruct
@@ -140,9 +143,10 @@ int  simpleInit();
 void simpleConfigEndianInOut(int in_end, int out_end);
 void simpleConfigSetDebug(int dbMask);
 int  simpleConfigModule(int type, int bank_number, void *firstPassRoutine, void *secondPassRoutine);
+int  simpleConfigIgnoreUndefinedBlocks(int ignore);
 int  simpleUnblock(volatile unsigned int *idata, volatile unsigned int *sdata, int nwords);
 int  simpleScanCodaEvent(volatile unsigned int *data);
-int  simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords);
+int  simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords, int bankIndex);
 int  simpleTriggerFirstPass(volatile unsigned int *data, int start_index, int nwords);
 int  simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int in_nwords);
 int  simpleFillEvent(volatile unsigned int *odata, volatile unsigned int *idata);
