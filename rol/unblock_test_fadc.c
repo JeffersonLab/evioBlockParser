@@ -8,7 +8,7 @@
 
 #define BLOCKLEVEL 10
 #define BUFFERLEVEL 10
-#define BLOCKLIMIT  1
+#define BLOCKLIMIT  5
 
 /* Event Buffer definitions */
 #define MAX_EVENT_POOL     10*BLOCKLEVEL  /* Should be at least BLOCKLEVEL*BUFFERLEVEL */
@@ -248,12 +248,6 @@ rocTrigger(int evnum)
 
   BLOCKOPEN(evnum,BT_BANK,BLOCKLEVEL);
 
-  BANKOPEN(5,BT_UI4,0);
-  *dma_dabufp++ = LSWAP(tiGetIntCount());
-  *dma_dabufp++ = LSWAP(0xdead);
-  *dma_dabufp++ = LSWAP(0xcebaf111);
-  BANKCLOSE;
-
 #ifdef TI_DATA_READOUT
   BANKOPEN(4,BT_UI4,0);
 
@@ -303,6 +297,12 @@ rocTrigger(int evnum)
       printf("ERROR: Data not ready in event %d\n",tiGetIntCount());
       *dma_dabufp++ = LSWAP(0xda000bad);
     }
+  BANKCLOSE;
+
+  BANKOPEN(5,BT_UI4,0);
+  *dma_dabufp++ = LSWAP(tiGetIntCount());
+  *dma_dabufp++ = LSWAP(0xdead);
+  *dma_dabufp++ = LSWAP(0xcebaf111);
   BANKCLOSE;
 
   BLOCKCLOSE;

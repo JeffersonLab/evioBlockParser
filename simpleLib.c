@@ -77,9 +77,14 @@ static modData mData[SIMPLE_MAX_NBLOCKS+1];
 static int     mBankIndex[SIMPLE_MAX_BANKS]; /* Index of module data in mData */
 static int     mBankLength[SIMPLE_MAX_BANKS]; /* Length of module data in mData */
 
+/* Other data, to be copied to only one event... or to every event in the block */
+static unsigned int      otherBankMask=0;
+static unsigned int      otherOnceBankMask=0;
+
 /* Output Coda Events indices and lengths */
-static codaEventBankInfo oBank[SIMPLE_MAX_BLOCKLEVEL+1];
-static int               oBlocks=0;
+static codaEventBankInfo outBank[SIMPLE_MAX_BLOCKLEVEL+1];
+static int               outBlocks=0;
+
 
 /* Structure defaults */
 const simpleModuleConfig MODULE_CONFIG_DEFAULTS = 
@@ -218,6 +223,13 @@ simpleConfigModule(int type, int bank_number, void *firstPassRoutine, void *seco
     mTriggerBankMask = (1<<bank_number);
   else
     mConfMask |= (1<<bank_number);
+
+  if((type==MODID_OTHER) || (type==MODID_OTHER_ONCE))
+    {
+      otherBankMask |= (1<<bank_number);
+      if(type==MODID_OTHER_ONCE)
+	otherOnceBankMask |= (1<<bank_number);
+    }
   
   nmconfs++;
 
@@ -268,9 +280,10 @@ simpleUnblock(volatile unsigned int *idata, volatile unsigned int *sdata, int nw
     {
       if( ((1<<cBank[ibank].ID) & cBankMask) && (ibank != cTriggerBankIndex))
 	{
-	  printf("%s: BINGO!  ibank = %d  cBankMask = 0x%08x  cTriggerBankIndex = %d\n",
-		 __FUNCTION__,ibank, cBankMask, cTriggerBankIndex);
-	  simpleFirstPass(idata, cBank[ibank].index, cBank[ibank].length, ibank);
+	  if( !((1<<cBank[ibank].ID) & otherBankMask))
+	    { /* OTHER banks will be taken care of in the second pass */
+	      simpleFirstPass(idata, cBank[ibank].index, cBank[ibank].length, ibank);
+	    }
 	}
     }
 
@@ -341,6 +354,15 @@ simpleScanCodaEvent(volatile unsigned int *data)
 	      {
 		cTriggerBank = cBank[ibank].ID;
 		cTriggerBankIndex = ibank;
+	      }
+
+	    if(simpleDebugMask & SIMPLE_SHOW_BANK_FOUND)
+	      {
+		printf("[%3d  0x%08x] BANK %2d: Length = %d, ID = %d\n",
+		       iword, data[cBank[ibank].index-2],
+		       ibank,
+		       cBank[ibank].length,
+		       cBank[ibank].ID);
 	      }
 
 	    if(simpleDebugMask & SIMPLE_SHOW_BLOCK_HEADER)
@@ -746,7 +768,7 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
 
   OUTp = (unsigned int *)&odata[0];
 
-  oBlocks = 0;
+  outBlocks = 0;
 
   /* Loop over events */
   for(iev=0; iev<tEventCounter; iev++)
@@ -776,7 +798,7 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
 		 tData[iev].index,
 		 tData[iev].length);
 	}
-      oBank[iev].index = nOUT;
+      outBank[iev].index = nOUT;
 
       /* Insert the trigger bank */
       if(cTriggerBank != 0)
@@ -802,33 +824,56 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
 	{
 	  if( ((1<<cBank[ibank].ID) & cBankMask) && (ibank != cTriggerBankIndex))
 	    {
-	      BOPEN(cBank[ibank].ID, BT_UI4, 0);
-	      for(iblk=0; iblk<blkCounter; iblk++)
-		{
-		  for(iword=mData[iblk].evtIndex[iev];
-		      iword<(mData[iblk].evtIndex[iev]+mData[iblk].evtLength[iev]); 
-		      iword++)
+	      if( ((1<<cBank[ibank].ID) & otherBankMask) == 0)
+		{ /* Payload Module Bank */
+		  BOPEN(cBank[ibank].ID, BT_UI4, 0);
+		  for(iblk=0; iblk<blkCounter; iblk++)
+		    {
+		      for(iword=mData[iblk].evtIndex[iev];
+			  iword<(mData[iblk].evtIndex[iev]+mData[iblk].evtLength[iev]); 
+			  iword++)
+			{
+			  if(simpleDebugMask & SIMPLE_SHOW_SECOND_PASS)
+			    {
+			      printf("Mod  Data  %5d: 0x%08x\n",iword,idata[iword]);
+			    }
+			  *OUTp++ = idata[iword];
+			}
+		    } /* Loop over (modules) blocks */
+		  BCLOSE;
+		}
+	      else
+		{ /* OTHER data banks */
+
+		  /* Only insert OTHER data in first event of block if specified
+		     as MODID_OTHER_ONCE */
+		  if((1<<cBank[ibank].ID) & otherOnceBankMask)
+		    if(iev!=0) continue;
+
+		  BOPEN(cBank[ibank].ID, BT_UI4, 0);
+		  for(iword=cBank[ibank].index; 
+		      iword<(cBank[ibank].index+cBank[ibank].length-1); iword++)
 		    {
 		      if(simpleDebugMask & SIMPLE_SHOW_SECOND_PASS)
 			{
-			  printf("Mod  Data  %5d: 0x%08x\n",iword,idata[iword]);
+			  printf("Other Data  %5d: 0x%08x\n",iword,idata[iword]);
 			}
 		      *OUTp++ = idata[iword];
 		    }
-		} /* Loop over (modules) blocks */
-	      BCLOSE;
+		  BCLOSE;
+		}
 	    }
 	}
 
       ECLOSE;
-      nOUT += oBank[iev].length = (*StartOfTrigEvent)+1;
+      nOUT += outBank[iev].length = (*StartOfTrigEvent)+1;
 
-      oBlocks++;
+      outBlocks++;
 
       if(simpleDebugMask & SIMPLE_SHOW_SECOND_PASS)
 	{
-	  printf("oBank %d index = %d   length = %d   nOUT = %d\n",
-		 iev, oBank[iev].index, oBank[iev].length, nOUT);
+	  printf("outBank %d index = %d   length = %d   nOUT = %d\n",
+		 iev, outBank[iev].index, outBank[iev].length, nOUT);
 	}
 
     }  /* Loop over events */
@@ -843,13 +888,13 @@ simpleFillEvent(volatile unsigned int *odata, volatile unsigned int *idata)
   int nwords=0, iev=0, eob=0;
   static int currentEventOfBlock=0;
   
-  if(currentEventOfBlock == oBlocks)
+  if(currentEventOfBlock == outBlocks)
     currentEventOfBlock = 0;
 
   eob = currentEventOfBlock;
   
 
-  for(iev=oBank[eob].index; iev < (oBank[eob].index + oBank[eob].length); iev++)
+  for(iev=outBank[eob].index; iev < (outBank[eob].index + outBank[eob].length); iev++)
     {
       if(simpleDebugMask & SIMPLE_SHOW_FILL_EVENTS)
 	{

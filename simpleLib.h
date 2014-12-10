@@ -78,7 +78,7 @@ typedef enum jlabModuleTypes
     MODID_SSP = 7,
     MODID_JLAB_DISC = 8,
     MODID_OTHER = 9,
-    MODID_OTHER_NOBLOCKS = 10,
+    MODID_OTHER_ONCE = 10,
     MAX_MODID
   } ModuleID;
 
