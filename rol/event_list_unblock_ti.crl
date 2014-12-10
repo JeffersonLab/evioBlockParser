@@ -30,8 +30,8 @@ begin download
   simpleConfigIgnoreUndefinedBlocks(1);
 
   simpleConfigModule(MODID_TI, 4, NULL,NULL);
-/*   simpleConfigModule(MODID_FA250,3, NULL,NULL); */
-  simpleConfigModule(MODID_OTHER_ONCE,5, NULL,NULL);
+  simpleConfigModule(MODID_FA250,3, NULL,NULL);
+  simpleConfigModule(MODID_OTHER,5, NULL,NULL);
 
   debugFlags = 
 /*     SIMPLE_SHOW_BLOCK_HEADER | */

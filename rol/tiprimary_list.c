@@ -91,7 +91,7 @@ void rocDownload();
 void rocPrestart();
 void rocGo();
 void rocEnd();
-void rocTrigger();
+void rocTrigger(int evnum);
 void rocCleanup();
 int  getOutQueueCount();
 int  getInQueueCount();

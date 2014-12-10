@@ -29,7 +29,7 @@
 #define SIMPLE_MAX_BLOCKLEVEL  255
 #define SIMPLE_MAX_BANKS        16
 
-#define BANK_NUMBER_MASK   0xFFFF0000
+#define BANK_ID_MASK   0xFFFF0000
 
 
 /* Standard JLab Module Data Format */
@@ -106,7 +106,7 @@ typedef enum simpleDebugType
 typedef struct ModuleProcStruct
 {
   int    type;
-  int    bank_number;
+  int    ID;
   unsigned int module_header;
   unsigned int header_mask;
   void  *firstPassRoutine;
@@ -137,17 +137,23 @@ typedef struct ModuleDataStruct
   int evtLength[SIMPLE_MAX_BLOCKLEVEL+1];
 } modData;
 
+typedef struct OtherBankStruct
+{
+  int ID;
+  int once;
+} otherBankInfo;
 
 
 int  simpleInit();
 void simpleConfigEndianInOut(int in_end, int out_end);
 void simpleConfigSetDebug(int dbMask);
-int  simpleConfigModule(int type, int bank_number, void *firstPassRoutine, void *secondPassRoutine);
+int  simpleConfigModule(int type, int ID, void *firstPassRoutine, void *secondPassRoutine);
 int  simpleConfigIgnoreUndefinedBlocks(int ignore);
 int  simpleUnblock(volatile unsigned int *idata, volatile unsigned int *sdata, int nwords);
 int  simpleScanCodaEvent(volatile unsigned int *data);
 int  simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords, int bankIndex);
 int  simpleTriggerFirstPass(volatile unsigned int *data, int start_index, int nwords);
+int  simpleTriggerFirstPass_oldTI(volatile unsigned int *data, int start_index, int nwords);
 int  simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int in_nwords);
 int  simpleFillEvent(volatile unsigned int *odata, volatile unsigned int *idata);
 #endif /* __SIMPLELIBH__ */
