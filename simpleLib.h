@@ -18,7 +18,7 @@
  *----------------------------------------------------------------------------*
  *
  * Description:
- *     Header for 
+ *     Header for
  *      (S)econdary (I)nstance (M)ultiblock (P)rocessing (L)ist (E)xtraction
  *
  * </pre>
@@ -27,6 +27,7 @@
 #define SIMPLE_MAX_SLOT_NUMBER  21
 #define SIMPLE_MAX_NBLOCKS      SIMPLE_MAX_SLOT_NUMBER
 #define SIMPLE_MAX_BLOCKLEVEL  255
+#define SIMPLE_MAX_ROCS        255
 #define SIMPLE_MAX_BANKS        16
 
 #define BANK_ID_MASK   0xFFFF0000
@@ -55,6 +56,28 @@
 #define TRIG_EVENT_HEADER_WORD_COUNT_MASK 0x0000FFFF
 
 #define FILLER_SLOT_MASK          0x07C00000
+
+/* Bank type definitions - These are in evioDictEntry.hxx */
+enum DataType {
+  EVIO_UNKNOWN32    =  (0x0),
+  EVIO_UINT32       =  (0x1),
+  EVIO_FLOAT32      =  (0x2),
+  EVIO_CHARSTAR8    =  (0x3),
+  EVIO_SHORT16      =  (0x4),
+  EVIO_USHORT16     =  (0x5),
+  EVIO_CHAR8        =  (0x6),
+  EVIO_UCHAR8       =  (0x7),
+  EVIO_DOUBLE64     =  (0x8),
+  EVIO_LONG64       =  (0x9),
+  EVIO_ULONG64      =  (0xa),
+  EVIO_INT32        =  (0xb),
+  EVIO_TAGSEGMENT   =  (0xc),
+  EVIO_ALSOSEGMENT  =  (0xd),
+  EVIO_ALSOBANK     =  (0xe),
+  EVIO_COMPOSITE    =  (0xf),
+  EVIO_BANK         =  (0x10),
+  EVIO_SEGMENT      =  (0x20)
+};
 
 typedef enum jlabDataTypes
   {
@@ -100,7 +123,8 @@ typedef enum simpleDebugType
     SIMPLE_SHOW_FILL_EVENTS      = (1<<6),
     SIMPLE_SHOW_SECOND_PASS      = (1<<7),
     SIMPLE_SHOW_UNBLOCK          = (1<<8),
-    SIMPLE_SHOW_IGNORED_BANKS    = (1<<9)
+    SIMPLE_SHOW_IGNORED_BANKS    = (1<<9),
+    SIMPLE_SHOW_SEGMENT_FOUND    = (1<<10)
   } simpleDebug;
 
 typedef struct ModuleProcStruct
@@ -112,6 +136,36 @@ typedef struct ModuleProcStruct
   void  *firstPassRoutine;
   void  *secondPassRoutine;
 } simpleModuleConfig;
+
+typedef struct CodaBankInfoStruct
+{
+  int length;
+  int ID;
+  int index;
+} codaBankInfo;
+
+typedef struct RocBankStruct
+{
+  int length;
+  int ID;
+  int index;
+  int blockLevel;
+  int type;
+  int nbanks;
+  codaBankInfo dataBank[SIMPLE_MAX_BANKS];
+} rocBankInfo;
+
+typedef struct TriggerSegmentStruct
+{
+  int length;
+  int ID;
+  int index;
+  int type;
+  int nrocs;
+  codaBankInfo segTime;
+  codaBankInfo segEvType;
+  codaBankInfo segRoc[SIMPLE_MAX_ROCS];
+} trigSegInfo;
 
 typedef struct CodaEventBankInfoStruct
 {

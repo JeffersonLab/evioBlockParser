@@ -16,75 +16,83 @@
  *----------------------------------------------------------------------------*
  *
  * Description:
- *     Library for 
+ *     Library for
  *      (S)econdary (I)nstance (M)ultiblock (P)rocessing (L)ist (E)xtraction
  *
  * </pre>
  *----------------------------------------------------------------------------*/
 
-#ifdef VXWORKS
-#include <vxWorks.h>
-#include <sysLib.h>
-#include <logLib.h>
-#include <taskLib.h>
-#include <vxLib.h>
-#endif
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include "jvme.h"
 #include "simpleLib.h"
 
+#ifndef ERROR
+#define ERROR -1
+#endif
 
-/* Bank type definitions */
+#ifndef OK
+#define OK 0
+#endif
+
+typedef void (*VOIDFUNCPTR) ();
+
 #define BT_BANK_ty 0x10
+#define BT_SEGMENT_ty 0x20
 #define BT_UB1_ty  0x07
 #define BT_UI2_ty  0x05
 #define BT_UI4_ty  0x01
 
 
 /* Global Variables */
-static simpleEndian       in_endian=SIMPLE_LITTLE_ENDIAN, out_endian=SIMPLE_LITTLE_ENDIAN;    /* Incoming and Output Endian-ness */
-static simpleDebug        simpleDebugMask=0;
-static simpleModuleConfig sModConfig[SIMPLE_MAX_MODULE_TYPES];
+simpleEndian       in_endian=SIMPLE_LITTLE_ENDIAN, out_endian=SIMPLE_LITTLE_ENDIAN;    /* Incoming and Output Endian-ness */
+simpleDebug        simpleDebugMask=0;
+simpleModuleConfig sModConfig[SIMPLE_MAX_MODULE_TYPES];
 
 /* Trigger event number, start at 1 */
-static unsigned int simpleTriggerNumber=1;
+unsigned int simpleTriggerNumber=1;
 
-/* CODA event Bank Info, updated for each block */
-static codaEventBankInfo cBank[SIMPLE_MAX_BANKS];
-static unsigned int      cTriggerBank=0;
-static unsigned int      cTriggerBankIndex=0;
-static int               nbanks=0;                      /* Number of banks found */
+/* CODA Event Banks Info, updated for each block */
+codaEventBankInfo cBank[SIMPLE_MAX_BANKS];
+unsigned int      cTriggerBank=0;
+unsigned int      cTriggerBankIndex=0;
+int               nbanks=0;                      /* Number of banks found */
 
-static int               ignoreUndefinedBanks=0;        /* Default is false */
+/* Trigger Bank of Segment */
+trigSegInfo trigBank;
+
+/* ROC Banks */
+rocBankInfo rocBank[SIMPLE_MAX_ROCS];
+int nRocs;
+
+int               ignoreUndefinedBanks=0;        /* Default is false */
 
 /* User defined Banks for separate modules, configured before run */
-static simpleModuleConfig mConf[SIMPLE_MAX_BANKS];
-static int                nmconfs=0;
+simpleModuleConfig mConf[SIMPLE_MAX_BANKS];
+int                nmconfs=0;
 
 /* Trigger module data (TS, TI) */
-static int      tEventCounter=0;
-static trigData tData[SIMPLE_MAX_BLOCKLEVEL+1];
-static int      tEventSyncFlag; /* Only the last event in the block will be flagged, if the block contains a syncFlag */
+int      tEventCounter=0;
+trigData tData[SIMPLE_MAX_BLOCKLEVEL+1];
+int      tEventSyncFlag; /* Only the last event in the block will be flagged, if the block contains a syncFlag */
 
 /* Payload module data (fADC250, fADC125, f1TDC) */
-static int     blkCounter=0; /* count of blocks within the data (one per module) */
-static modData mData[SIMPLE_MAX_NBLOCKS+1];
-static int     mBankIndex[SIMPLE_MAX_BANKS]; /* Index of module data in mData */
-static int     mBankLength[SIMPLE_MAX_BANKS]; /* Length of module data in mData */
+int     blkCounter=0; /* count of blocks within the data (one per module) */
+modData mData[SIMPLE_MAX_NBLOCKS+1];
+int     mBankIndex[SIMPLE_MAX_BANKS]; /* Index of module data in mData */
+int     mBankLength[SIMPLE_MAX_BANKS]; /* Length of module data in mData */
 
 /* Other data, to be copied to only one event... or to every event in the block */
-static otherBankInfo     otherBank[SIMPLE_MAX_BANKS];
-static unsigned int      notherBank=0;
+otherBankInfo     otherBank[SIMPLE_MAX_BANKS];
+unsigned int      notherBank=0;
 
 /* Output Coda Events indices and lengths */
-static codaEventBankInfo outBank[SIMPLE_MAX_BLOCKLEVEL+1];
-static int               outBlocks=0;
+codaEventBankInfo outBank[SIMPLE_MAX_BLOCKLEVEL+1];
+int               outBlocks=0;
 
 
 /* Structure defaults */
-const simpleModuleConfig MODULE_CONFIG_DEFAULTS = 
+const simpleModuleConfig MODULE_CONFIG_DEFAULTS =
   {
     -1,   /* type */
     -1,   /* ID */
@@ -94,14 +102,14 @@ const simpleModuleConfig MODULE_CONFIG_DEFAULTS =
     (VOIDFUNCPTR)simpleSecondPass /* secondPassRoutine */
   };
 
-const codaEventBankInfo EVENT_BANK_INFO_DEFAULTS = 
+const codaEventBankInfo EVENT_BANK_INFO_DEFAULTS =
   {
     -1,  /* length */
     -1,  /* ID */
     -1   /* index */
   };
 
-const trigData TRIG_DATA_DEFAULTS = 
+const trigData TRIG_DATA_DEFAULTS =
   {
     -1, /* type */
     -1, /* index */
@@ -109,7 +117,7 @@ const trigData TRIG_DATA_DEFAULTS =
     -1  /* number */
   };
 
-/* 
+/*
    Bank array utils
 */
 
@@ -272,7 +280,7 @@ simpleUnblock(volatile unsigned int *idata, volatile unsigned int *sdata, int nw
   /* Treat the trigger bank, if it was found */
   if(cTriggerBank != 0)
     {
-      simpleTriggerFirstPass(idata, cBank[cTriggerBankIndex].index, 
+      simpleTriggerFirstPass(idata, cBank[cTriggerBankIndex].index,
 			     cBank[cTriggerBankIndex].length);
     }
 
@@ -314,97 +322,215 @@ int
 simpleScanCodaEvent(volatile unsigned int *data)
 {
   int iword=0, nwords=0;
-  int bank_type=0;
+  int bank_type=0, bank_length = 0;
   int ibank=0;
 
   nbanks=0;
   memset((char*)cBank, 0, sizeof(cBank));
 
+  memset((char*)&trigBank, 0, sizeof(trigBank));
+
   /* First word should be the length of the CODA event */
   nwords = data[iword++];
-
   /* Next word should be the CODA Event header */
   bank_type = (data[iword++] & 0xFF00)>>8;
 
-  switch(bank_type)
+  if(bank_type == EVIO_BANK)
     {
-    case BT_BANK_ty:
-      {
-	/* Determine lengths and indicies of each bank */
-	while(iword<nwords)
+      unsigned int triggerBankHeader = 0;
+      int trigBankNumRocs = 0, headerIndex = 0;
+
+      /* Hopefully this is the start of the trigger bank */
+      trigBank.length = data[iword++];
+      headerIndex = iword;
+      triggerBankHeader = data[iword++];
+      if((triggerBankHeader & 0xFF00)>>8 == EVIO_SEGMENT)
+	{
+	  trigBank.index = headerIndex;
+	  trigBankNumRocs = triggerBankHeader & 0xFF;
+	  trigBank.type = (triggerBankHeader & 0xFFFF0000) >> 16;
+
+	if(simpleDebugMask & SIMPLE_SHOW_BANK_FOUND)
 	  {
-	    cBank[ibank].length = data[iword++];
-	    cBank[ibank].ID     = (data[iword++] & BANK_ID_MASK)>>16;
-	    cBank[ibank].index  = iword; /* Point at first data word */
+	    printf("[%6d  0x%08x] TRGB 0x%4x: Length = %d, N = %d\n",
+		   headerIndex, triggerBankHeader,
+		   trigBank.type,
+		   trigBank.length,
+		   trigBankNumRocs);
 
-	    if(ignoreUndefinedBanks)
-	      if( !isA_mConf(cBank[ibank].ID) )
-		{
-		  if(simpleDebugMask & SIMPLE_SHOW_IGNORED_BANKS)
-		    {
-		      printf("[%3d  0x%08x] IGNORED BANK %2d: Length = %d, ID = %d\n",
-			     iword, data[cBank[ibank].index-2],
-			     ibank,
-			     cBank[ibank].length,
-			     cBank[ibank].ID);
-		    }
-		  iword += cBank[ibank].length - 1; /* Jump to next bank */
-		  continue;
-		}
-
-	    /* Check to see if this bank was user defined to be a trigger bank */
-	    if( isA_mTriggerBank(cBank[ibank].ID) )
-	      {
-		cTriggerBank = cBank[ibank].ID;
-		cTriggerBankIndex = ibank;
-	      }
-
-	    if(simpleDebugMask & SIMPLE_SHOW_BANK_FOUND)
-	      {
-		printf("[%3d  0x%08x] BANK %2d: Length = %d, ID = %d\n",
-		       iword, data[cBank[ibank].index-2],
-		       ibank,
-		       cBank[ibank].length,
-		       cBank[ibank].ID);
-	      }
-
-	    if(simpleDebugMask & SIMPLE_SHOW_BLOCK_HEADER)
-	      {
-		printf("[%3d  0x%08x] BANK %2d: Length = %d, ID = %d\n",
-		       iword, data[cBank[ibank].index-2],
-		       ibank,
-		       cBank[ibank].length,
-		       cBank[ibank].ID);
-	      }
-
-	    iword += cBank[ibank].length - 1; /* Jump to next bank */
-	    ibank++;
 	  }
-	nbanks = ibank;
-	break;
-      }
+	}
+      else
+	{
+	  printf("%s: ERROR: 0x%08x Unexpected bank type 0x%x (%d)\n",
+		 __func__, triggerBankHeader,
+		 (triggerBankHeader & 0xFF00)>>8,
+		 (triggerBankHeader & 0xFF00)>>8);
+	  return ERROR;
+	}
 
-    case BT_UI4_ty:
-      {
-	printf("%s: ERROR: Bank type 0x%x not supported\n",
-	       __FUNCTION__,bank_type);
-	return ERROR;
-	/* If there are Lengths and Headers defined by the user, use them to find the
-	   indicies */
-	while(iword<nwords)
-	  {
-	    /* FIXME: Will do this later... */
-	  }
+      /* Process each trigger segment */
+      while(iword < (trigBank.index + trigBank.length))
+	{
+	  unsigned int segHeader = 0;
+	  int segID = 0, segNumber = 0, segLength = 0;
 
-	break;
-      }
+	  headerIndex = iword;
+	  segHeader = data[iword++];
+	  segID = (segHeader & 0xFF000000) >> 24;
+	  segNumber = (segHeader & 0x00FF0000) >> 16;
+	  segLength = (segHeader & 0xFFFF);
 
-    default:
-      printf("%s: ERROR: Bank type 0x%x not supported\n",
-	     __FUNCTION__,bank_type);
+	  if(simpleDebugMask & SIMPLE_SHOW_SEGMENT_FOUND)
+	    {
+	      printf("[%6d  0x%08x] SEGM %2d: Length = %d, ID = 0x%x (%d)\n",
+		     headerIndex, segHeader,
+		     segNumber,
+		     segLength,
+		     segID, segID);
+	    }
+
+	  switch(segNumber)
+	    {
+	    case 0xA:	  /* Event number ( + timestamp) segment */
+	      {
+		trigBank.segTime.index = iword;
+		trigBank.segTime.length = segHeader & 0xFFFF;
+		break;
+	      }
+	    case 0x5:	  /* Event type segment */
+	      {
+		trigBank.segEvType.index = iword;
+		trigBank.segEvType.length = segHeader & 0xFFFF;
+		break;
+	      }
+	    case 0x1:	  /* ROC segment */
+	      {
+		trigBank.segRoc[segID].index = iword;
+		trigBank.segRoc[segID].length = segHeader & 0xFFFF;
+		break;
+	      }
+
+	    default:
+	      printf("%s: ERROR: [0x%08x] Unexpected Segment 0x%x (%d) in trigger bank\n",
+		     __func__, segHeader, segNumber, segNumber);
+	      return ERROR;
+	    }
+	  iword += segLength;
+	}
+    }
+  else
+    {
+      printf("%s: ERROR: Unexpected Bank type 0x%x (%d)\n",
+	     __func__, bank_type, bank_type);
       return ERROR;
     }
 
+  /* ROC Banks start here */
+  while(iword<nwords)
+    {
+      unsigned int rocBankHeader = 0;
+      int rocBankLength = 0, rocBankIndex = 0, kType = 0, rocID = 0;
+
+
+      /* Process the ROC bank header */
+      rocBankLength = data[iword++];
+      rocBankIndex  = iword;
+      rocBankHeader = data[iword++];
+      rocID = (rocBankHeader & 0x0FFF0000) >> 16;
+
+      if(rocID > SIMPLE_MAX_ROCS)
+	{
+	  printf("%s: ERROR: rocID = %d. I cant handle rocIDs > %d\n",
+		 __func__, rocID, SIMPLE_MAX_ROCS);
+	  return ERROR;
+	}
+
+      rocBank[rocID].index = rocBankIndex;
+      rocBank[rocID].length = rocBankLength;
+      rocBank[rocID].type = (rocBankHeader & 0xFF00) >> 8;
+      rocBank[rocID].blockLevel = (rocBankHeader & 0xFF);
+
+      if(simpleDebugMask & SIMPLE_SHOW_BANK_FOUND)
+	{
+	  printf("[%6d  0x%08x] ROCB %2d: Length = %d, type = 0x%2x blocklevel = %d\n",
+		 rocBank[rocID].index, data[rocBank[rocID].index],
+		 rocID,
+		 rocBank[rocID].length,
+		 rocBank[rocID].type,
+		 rocBank[rocID].blockLevel);
+	}
+
+      switch(rocBank[rocID].type)
+	{
+	case EVIO_BANK:
+	  {
+	    /* Determine lengths and indicies of each bank */
+	    while(iword < (rocBank[rocID].index + rocBank[rocID].length))
+	      {
+		cBank[ibank].length = data[iword++];
+		cBank[ibank].index  = iword;
+		cBank[ibank].ID     = (data[iword] & BANK_ID_MASK)>>16;
+
+		if(ignoreUndefinedBanks)
+		  if( !isA_mConf(cBank[ibank].ID) )
+		    {
+		      if(simpleDebugMask & SIMPLE_SHOW_IGNORED_BANKS)
+			{
+			  printf("[%6d  0x%08x] IGNORED BANK %2d: Length = %d, ID = 0x%x (%d)\n",
+				 cBank[ibank].index, data[cBank[ibank].index],
+				 ibank,
+				 cBank[ibank].length,
+				 cBank[ibank].ID, cBank[ibank].ID);
+			}
+		      iword += cBank[ibank].length; /* Jump to next bank */
+		      continue;
+		    }
+
+		/* Check to see if this bank was user defined to be a trigger bank */
+		if( isA_mTriggerBank(cBank[ibank].ID) )
+		  {
+		    cTriggerBank = cBank[ibank].ID;
+		    cTriggerBankIndex = ibank;
+		  }
+
+		if(simpleDebugMask & SIMPLE_SHOW_BANK_FOUND)
+		  {
+		    printf("[%6d  0x%08x] BANK %2d: Length = %d\n",
+			   cBank[ibank].index, data[cBank[ibank].index],
+			   cBank[ibank].ID,
+			   cBank[ibank].length);
+		  }
+
+		iword += cBank[ibank].length; /* Jump to next bank */
+		ibank++;
+	      }
+	    nbanks = ibank;
+	    break;
+	  }
+
+	case BT_UI4_ty:
+	  {
+	    printf("%s: ERROR: Bank type 0x%x not supported\n",
+		   __FUNCTION__,bank_type);
+	    return ERROR;
+	    /* If there are Lengths and Headers defined by the user, use them to find the
+	       indicies */
+	    while(iword<nwords)
+	      {
+		/* FIXME: Will do this later... */
+	      }
+
+	    break;
+	  }
+
+	default:
+	  printf("%s: ERROR: Bank type 0x%x not supported\n",
+		 __FUNCTION__,bank_type);
+	  return ERROR;
+	}
+
+    }
   return OK;
 }
 
@@ -433,7 +559,7 @@ simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords, int ban
   int iblock=0;
 
   /* Re-initialized block counter */
-  blkCounter = 0; 
+  blkCounter = 0;
 
   iword = startIndex;
   nwords += startIndex;
@@ -449,7 +575,7 @@ simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords, int ban
 		     __FUNCTION__,data_type,iword);
 	      rval = ERROR;
 	    }
-	  else 
+	  else
 	    {
 	      switch(data_type)
 		{
@@ -466,7 +592,7 @@ simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords, int ban
 		    mData[current_block].slotNumber = current_slot;
 		    mData[current_block].blkIndex   = iword;
 
-		
+
 		    if(simpleDebugMask & SIMPLE_SHOW_BLOCK_HEADER)
 		      {
 			printf("(%3d) BLOCK HEADER: slot %2d, block_number %3d, block_level %3d\n",
@@ -487,15 +613,15 @@ simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords, int ban
 			       iword,
 			       current_slot,block_words);
 		      }
-		
+
 		    current_block = blkCounter-1;
 
 		    /* Obtain the previous event length */
 		    if(mData[current_block].evtCounter > 0)
 		      {
 			current_event = mData[current_block].evtCounter - 1;
-		  
-			mData[current_block].evtLength[current_event] = 
+
+			mData[current_block].evtLength[current_event] =
 			  iword - mData[current_block].evtIndex[current_event];
 		      }
 
@@ -536,8 +662,8 @@ simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords, int ban
 		    if(mData[current_block].evtCounter > 0)
 		      {
 			current_event = mData[current_block].evtCounter - 1;
-		  
-			mData[current_block].evtLength[current_event] = 
+
+			mData[current_block].evtLength[current_event] =
 			  iword - mData[current_block].evtIndex[current_event];
 		      }
 
@@ -547,7 +673,7 @@ simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords, int ban
 
 		    break;
 		  }
-	      
+
 		default:
 		  /* Ignore all other data types for now */
 		    if(simpleDebugMask & SIMPLE_SHOW_EVENT_HEADER)
@@ -616,7 +742,7 @@ simpleTriggerFirstPass(volatile unsigned int *data, int start_index, int nwords)
 		     __FUNCTION__,data_type,iword);
 	      rval = ERROR;
 	    }
-	  else 
+	  else
 	    {
 	      switch(data_type)
 		{
@@ -680,7 +806,7 @@ simpleTriggerFirstPass(volatile unsigned int *data, int start_index, int nwords)
 		      }
 		    break;
 		  }
-		  
+
 		case BLOCK_TRAILER:
 		  {
 		    current_slot = (data[iword] & BLOCK_TRAILER_SLOT_MASK)>>22;
@@ -692,7 +818,7 @@ simpleTriggerFirstPass(volatile unsigned int *data, int start_index, int nwords)
 			       iword, data[iword],
 			       current_slot,block_words);
 		      }
-		    
+
 		    break;
 		  }
 
@@ -706,7 +832,7 @@ simpleTriggerFirstPass(volatile unsigned int *data, int start_index, int nwords)
 
       iword++;
     } /* while(iword<nwords) */
-  
+
   return rval;
 }
 
@@ -748,7 +874,7 @@ simpleTriggerFirstPass_oldTI(volatile unsigned int *data, int start_index, int n
 		     __FUNCTION__,data[iword],iword);
 	      rval = ERROR;
 	    }
-	  
+
 	  nevents = block_level;
 
 	  tEventCounter = 0; /* Initialize the trig event counter */
@@ -777,12 +903,12 @@ simpleTriggerFirstPass_oldTI(volatile unsigned int *data, int start_index, int n
 	      iword += tData[ievt].length;
 	      tEventCounter++;
 	    }
-	  
+
 	}
       iword++;
 
     } /* while(iword<nwords) */
-  
+
   return rval;
 }
 
@@ -837,7 +963,7 @@ simpleTriggerFirstPass_oldTI(volatile unsigned int *data, int start_index, int n
  * @return OK if successful, otherwise ERROR
  */
 
-int 
+int
 simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int in_nwords)
 {
   int iev=0, iblk=0, iword=0, nOUT=0;
@@ -864,12 +990,12 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
 	syncFlag = 0;
 
       evnumber = simpleTriggerNumber++;
-	  
+
       /* Open the event */
       evtype &= 0xF; /* CODA2 event type limit */
 /*       if(evtype==0) evtype = 0xF; /\* Make sure these get through too *\/ */
       EOPEN(evtype,BT_BANK,syncFlag,tData[iev].number);
-      
+
       /* Insert Trigger Bank first */
       if(simpleDebugMask & SIMPLE_SHOW_SECOND_PASS)
 	{
@@ -884,8 +1010,8 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
       if(cTriggerBank != 0)
 	{
 	  BOPEN(cTriggerBank, BT_UI4, 0);
-	  for(iword=tData[iev].index; 
-	      iword<(tData[iev].index+tData[iev].length-1); 
+	  for(iword=tData[iev].index;
+	      iword<(tData[iev].index+tData[iev].length-1);
 	      iword++)
 	    {
 	      if(simpleDebugMask & SIMPLE_SHOW_SECOND_PASS)
@@ -898,7 +1024,7 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
 	}
 
       /* Insert payload banks */
-      
+
       /* Loop over (modules) blocks */
       for(ibank=0; ibank<SIMPLE_MAX_BANKS; ibank++)
 	{
@@ -910,7 +1036,7 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
 		  for(iblk=0; iblk<blkCounter; iblk++)
 		    {
 		      for(iword=mData[iblk].evtIndex[iev];
-			  iword<(mData[iblk].evtIndex[iev]+mData[iblk].evtLength[iev]); 
+			  iword<(mData[iblk].evtIndex[iev]+mData[iblk].evtLength[iev]);
 			  iword++)
 			{
 			  if(simpleDebugMask & SIMPLE_SHOW_SECOND_PASS)
@@ -931,7 +1057,7 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
 		    if(iev!=0) continue;
 
 		  BOPEN(cBank[ibank].ID, BT_UI4, 0);
-		  for(iword=cBank[ibank].index; 
+		  for(iword=cBank[ibank].index;
 		      iword<(cBank[ibank].index+cBank[ibank].length-1); iword++)
 		    {
 		      if(simpleDebugMask & SIMPLE_SHOW_SECOND_PASS)
@@ -957,7 +1083,7 @@ simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int
 	}
 
     }  /* Loop over events */
-  
+
   return nOUT;
 
 }
@@ -967,12 +1093,12 @@ simpleFillEvent(volatile unsigned int *odata, volatile unsigned int *idata)
 {
   int nwords=0, iev=0, eob=0;
   static int currentEventOfBlock=0;
-  
+
   if(currentEventOfBlock == outBlocks)
     currentEventOfBlock = 0;
 
   eob = currentEventOfBlock;
-  
+
 
   for(iev=outBank[eob].index; iev < (outBank[eob].index + outBank[eob].length); iev++)
     {
@@ -985,13 +1111,13 @@ simpleFillEvent(volatile unsigned int *odata, volatile unsigned int *idata)
 
   if(nwords==0)
     return 0;
-  
+
   currentEventOfBlock++;
 
   return nwords;
 }
 
-/* 
+/*
    Bank array utils
 */
 
@@ -1038,7 +1164,7 @@ isA_otherBank(int bankID)
       return 1;
 
   return 0;
-  
+
 }
 
 int
@@ -1051,6 +1177,5 @@ isA_otherOnceBank(int bankID)
 	return 1;
 
   return 0;
-  
-}
 
+}
