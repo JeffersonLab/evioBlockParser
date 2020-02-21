@@ -151,7 +151,7 @@ typedef struct RocBankStruct
   int index;
   int blockLevel;
   int type;
-  int nbanks;
+  int nbanks;  // FIXME: Make sure this is set
   codaBankInfo dataBank[SIMPLE_MAX_BANKS];
 } rocBankInfo;
 
@@ -161,7 +161,7 @@ typedef struct TriggerSegmentStruct
   int ID;
   int index;
   int type;
-  int nrocs;
+  int nrocs;  // FIXME: Make sure this is set
   codaBankInfo segTime;
   codaBankInfo segEvType;
   codaBankInfo segRoc[SIMPLE_MAX_ROCS];
@@ -184,6 +184,8 @@ typedef struct TriggerDataStruct
 
 typedef struct ModuleDataStruct
 {
+  int rocID;
+  int bankID;
   int slotNumber;
   int blkIndex;
   int evtCounter;
@@ -205,7 +207,7 @@ int  simpleConfigModule(int type, int ID, void *firstPassRoutine, void *secondPa
 int  simpleConfigIgnoreUndefinedBlocks(int ignore);
 int  simpleUnblock(volatile unsigned int *idata, volatile unsigned int *sdata, int nwords);
 int  simpleScanCodaEvent(volatile unsigned int *data);
-int  simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords, int bankIndex);
+int  simpleFirstPass(volatile unsigned int *data, int rocID, int bankNumber);
 int  simpleTriggerFirstPass(volatile unsigned int *data, int start_index, int nwords);
 int  simpleTriggerFirstPass_oldTI(volatile unsigned int *data, int start_index, int nwords);
 int  simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int in_nwords);

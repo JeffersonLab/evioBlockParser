@@ -77,6 +77,9 @@ trigData tData[SIMPLE_MAX_BLOCKLEVEL+1];
 int      tEventSyncFlag; /* Only the last event in the block will be flagged, if the block contains a syncFlag */
 
 /* Payload module data (fADC250, fADC125, f1TDC) */
+
+
+
 int     blkCounter=0; /* count of blocks within the data (one per module) */
 modData mData[SIMPLE_MAX_NBLOCKS+1];
 int     mBankIndex[SIMPLE_MAX_BANKS]; /* Index of module data in mData */
@@ -284,6 +287,7 @@ simpleUnblock(volatile unsigned int *idata, volatile unsigned int *sdata, int nw
 			     cBank[cTriggerBankIndex].length);
     }
 
+#ifdef SKIP
   /* Perform a first pass to organize module event data */
   if(simpleDebugMask & SIMPLE_SHOW_UNBLOCK)
     {
@@ -299,6 +303,7 @@ simpleUnblock(volatile unsigned int *idata, volatile unsigned int *sdata, int nw
 	    }
 	}
     }
+#endif
 
   /* Perform Second Pass that puts the events in a temporary buffer */
   if(simpleDebugMask & SIMPLE_SHOW_UNBLOCK)
@@ -468,44 +473,41 @@ simpleScanCodaEvent(volatile unsigned int *data)
 	    /* Determine lengths and indicies of each bank */
 	    while(iword < (rocBank[rocID].index + rocBank[rocID].length))
 	      {
-		cBank[ibank].length = data[iword++];
-		cBank[ibank].index  = iword;
-		cBank[ibank].ID     = (data[iword] & BANK_ID_MASK)>>16;
+		int dataBankLength = 0, dataBankID = 0;
+		unsigned int dataBankHeader = 0;
+
+		dataBankLength = data[iword++];
+		dataBankHeader = data[iword];
+		dataBankID = (dataBankHeader & BANK_ID_MASK)>>16;
+
+		rocBank[rocID].dataBank[dataBankID].length = dataBankLength;
+		rocBank[rocID].dataBank[dataBankID].index  = iword;
+		rocBank[rocID].dataBank[dataBankID].ID     = dataBankID;
 
 		if(ignoreUndefinedBanks)
-		  if( !isA_mConf(cBank[ibank].ID) )
+		  if( !isA_mConf(rocBank[rocID].dataBank[dataBankID].ID) )
 		    {
 		      if(simpleDebugMask & SIMPLE_SHOW_IGNORED_BANKS)
 			{
-			  printf("[%6d  0x%08x] IGNORED BANK %2d: Length = %d, ID = 0x%x (%d)\n",
-				 cBank[ibank].index, data[cBank[ibank].index],
-				 ibank,
-				 cBank[ibank].length,
-				 cBank[ibank].ID, cBank[ibank].ID);
+			  printf("[%6d  0x%08x] IGNORED BANK %2d: Length = %d\n",
+				 rocBank[rocID].dataBank[dataBankID].index, dataBankHeader,
+				 rocBank[rocID].dataBank[dataBankID].ID,
+				 rocBank[rocID].dataBank[dataBankID].length);
 			}
-		      iword += cBank[ibank].length; /* Jump to next bank */
+		      iword += rocBank[rocID].dataBank[dataBankID].length; /* Jump to next bank */
 		      continue;
 		    }
-
-		/* Check to see if this bank was user defined to be a trigger bank */
-		if( isA_mTriggerBank(cBank[ibank].ID) )
-		  {
-		    cTriggerBank = cBank[ibank].ID;
-		    cTriggerBankIndex = ibank;
-		  }
 
 		if(simpleDebugMask & SIMPLE_SHOW_BANK_FOUND)
 		  {
 		    printf("[%6d  0x%08x] BANK %2d: Length = %d\n",
-			   cBank[ibank].index, data[cBank[ibank].index],
-			   cBank[ibank].ID,
-			   cBank[ibank].length);
+			   rocBank[rocID].dataBank[dataBankID].index, dataBankHeader,
+			   rocBank[rocID].dataBank[dataBankID].ID,
+			   rocBank[rocID].dataBank[dataBankID].length);
 		  }
 
-		iword += cBank[ibank].length; /* Jump to next bank */
-		ibank++;
+		iword += rocBank[rocID].dataBank[dataBankID].length; /* Jump to next bank */
 	      }
-	    nbanks = ibank;
 	    break;
 	  }
 
@@ -536,9 +538,9 @@ simpleScanCodaEvent(volatile unsigned int *data)
 
 /**
  * @ingroup Unblock
- * @brief First pass through data to determine header indicies.
+ * @brief Pass through a ROC's bank to determine Event header indicies
  *
- *    This is the default first pass algorithm, if one is not specified with
+ *    This is the default method, if one is not specified with
  *    simpleConfigModule.  It uses the JLab Data Format Standard
  *
  * @param data Memory address of the data
@@ -548,7 +550,7 @@ simpleScanCodaEvent(volatile unsigned int *data)
  */
 
 int
-simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords, int bankIndex)
+simpleFirstPass(volatile unsigned int *data, int rocID, int bankNumber)
 {
   int rval=OK;
   int iword=0; /* Index of current word in *data */
@@ -557,6 +559,7 @@ simpleFirstPass(volatile unsigned int *data, int startIndex, int nwords, int ban
   int block_words=0;
   int current_block=0, current_event=0;
   int iblock=0;
+  int startIndex = 0, nwords = 0; // FIXME: OLD ARGUMENTS
 
   /* Re-initialized block counter */
   blkCounter = 0;
