@@ -28,7 +28,7 @@
 #define SIMPLE_MAX_NBLOCKS      SIMPLE_MAX_SLOT_NUMBER
 #define SIMPLE_MAX_BLOCKLEVEL  255
 #define SIMPLE_MAX_ROCS        255
-#define SIMPLE_MAX_BANKS        16
+#define SIMPLE_MAX_BANKS       255
 
 #define BANK_ID_MASK   0xFFFF0000
 
@@ -134,7 +134,6 @@ typedef struct ModuleProcStruct
   unsigned int module_header;
   unsigned int header_mask;
   void  *firstPassRoutine;
-  void  *secondPassRoutine;
 } simpleModuleConfig;
 
 typedef struct CodaBankInfoStruct
@@ -166,6 +165,17 @@ typedef struct TriggerSegmentStruct
   codaBankInfo segEvType;
   codaBankInfo segRoc[SIMPLE_MAX_ROCS];
 } trigSegInfo;
+
+typedef struct BankDataStruct
+{
+  int rocID;
+  int bankID;
+  int slotNumber;
+  int blkIndex;
+  int evtCounter;
+  int evtIndex[SIMPLE_MAX_BLOCKLEVEL+1];
+  int evtLength[SIMPLE_MAX_BLOCKLEVEL+1];
+} bankDataInfo;
 
 typedef struct CodaEventBankInfoStruct
 {
@@ -203,13 +213,12 @@ typedef struct OtherBankStruct
 int  simpleInit();
 void simpleConfigEndianInOut(int in_end, int out_end);
 void simpleConfigSetDebug(int dbMask);
-int  simpleConfigModule(int type, int ID, void *firstPassRoutine, void *secondPassRoutine);
+int  simpleConfigModule(int type, int ID, void *firstPassRoutine);
 int  simpleConfigIgnoreUndefinedBlocks(int ignore);
 int  simpleUnblock(volatile unsigned int *idata, volatile unsigned int *sdata, int nwords);
+
+int  simpleScan(volatile unsigned int *data, int nwords);
 int  simpleScanCodaEvent(volatile unsigned int *data);
-int  simpleFirstPass(volatile unsigned int *data, int rocID, int bankNumber);
-int  simpleTriggerFirstPass(volatile unsigned int *data, int start_index, int nwords);
-int  simpleTriggerFirstPass_oldTI(volatile unsigned int *data, int start_index, int nwords);
-int  simpleSecondPass(volatile unsigned int *odata, volatile unsigned int *idata, int in_nwords);
-int  simpleFillEvent(volatile unsigned int *odata, volatile unsigned int *idata);
+int  simpleScanBank(volatile unsigned int *data, int rocID, int bankNumber);
+
 #endif /* __SIMPLELIBH__ */

@@ -13,7 +13,7 @@ main(int argc, char **argv)
   uint32_t *buf, bufLen, nevents = 0, status = 0;
   char filename[128] = "/home/moffit/tmp/vtpCompton_854.dat.0";
 
-  simpleConfigSetDebug(0xffff);
+  simpleConfigSetDebug(0xffff & ~SIMPLE_SHOW_OTHER);
   /* Open file  */
   if((status = evOpen((char *)filename,
 		      (char *) "r", &handle)) < 0)
@@ -87,7 +87,7 @@ main(int argc, char **argv)
 
       if(pe)
 	{
-	  simpleScanCodaEvent(buf);
+	  simpleScan(buf, nWords);
 	}
     }
 
