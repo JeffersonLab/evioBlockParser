@@ -24,13 +24,21 @@
  * </pre>
  *----------------------------------------------------------------------------*/
 #define SIMPLE_MAX_MODULE_TYPES  4
-#define SIMPLE_MAX_SLOT_NUMBER  21
-#define SIMPLE_MAX_NBLOCKS      SIMPLE_MAX_SLOT_NUMBER
 #define SIMPLE_MAX_BLOCKLEVEL  255
 #define SIMPLE_MAX_ROCS        255
 #define SIMPLE_MAX_BANKS       255
+#define SIMPLE_MAX_SLOTS        32
 
 #define BANK_ID_MASK   0xFFFF0000
+
+
+#ifndef ERROR
+#define ERROR -1
+#endif
+
+#ifndef OK
+#define OK 0
+#endif
 
 
 /* Standard JLab Module Data Format */
@@ -56,6 +64,67 @@
 #define TRIG_EVENT_HEADER_WORD_COUNT_MASK 0x0000FFFF
 
 #define FILLER_SLOT_MASK          0x07C00000
+
+typedef struct
+{
+  unsigned int undef:27;
+  unsigned int data_type_tag:4;
+  unsigned int data_type_defining:1;
+} jlab_data_word;
+
+typedef union
+{
+  unsigned int raw;
+  jlab_data_word bf;
+} jlab_data_word_t;
+
+/* 0: BLOCK HEADER */
+typedef struct
+{
+  unsigned int number_of_events_in_block:8;
+  unsigned int event_block_number:10;
+  unsigned int module_ID:4;
+  unsigned int slot_number:5;
+  unsigned int data_type_tag:4;
+  unsigned int data_type_defining:1;
+} block_header;
+
+typedef union
+{
+  unsigned int raw;
+  block_header bf;
+} block_header_t;
+
+/* 1: BLOCK TRAILER */
+typedef struct
+{
+  unsigned int words_in_block:22;
+  unsigned int slot_number:5;
+  unsigned int data_type_tag:4;
+  unsigned int data_type_defining:1;
+} block_trailer;
+
+typedef union
+{
+  unsigned int raw;
+  block_trailer bf;
+} block_trailer_t;
+
+/* 2: EVENT HEADER */
+typedef struct
+{
+  unsigned int event_number:22;
+  unsigned int slot_number:5;
+  unsigned int data_type_tag:4;
+  unsigned int data_type_defining:1;
+} event_header;
+
+typedef union
+{
+  unsigned int raw;
+  event_header bf;
+} event_header_t;
+
 
 /* Bank type definitions - These are in evioDictEntry.hxx */
 enum DataType {
@@ -107,8 +176,8 @@ typedef enum jlabModuleTypes
 
 typedef enum simpleEndianType
   {
-    SIMPLE_LITTLE_ENDIAN,
-    SIMPLE_BIG_ENDIAN
+    SIMPLE_LITTLE_ENDIAN = 0,
+    SIMPLE_BIG_ENDIAN    = 1
   } simpleEndian;
 
 
@@ -127,70 +196,91 @@ typedef enum simpleDebugType
     SIMPLE_SHOW_SEGMENT_FOUND    = (1<<10)
   } simpleDebug;
 
-typedef struct ModuleProcStruct
+typedef struct
 {
-  int    type;
-  int    ID;
-  unsigned int module_header;
-  unsigned int header_mask;
-  void  *firstPassRoutine;
-} simpleModuleConfig;
+  unsigned int num:8;
+  unsigned int type:6;
+  unsigned int padding:2;
+  unsigned int tag:16;
+} bankHeader;
+
+typedef union
+{
+  unsigned int raw;
+  bankHeader bf;
+} bankHeader_t;
+
+typedef struct
+{
+  unsigned int num:16;
+  unsigned int type:6;
+  unsigned int padding:2;
+  unsigned int tag:8;
+} segmentHeader;
+
+typedef union
+{
+  unsigned int raw;
+  segmentHeader bf;
+} segmentHeader_t;
 
 typedef struct CodaBankInfoStruct
 {
   int length;
-  int ID;
+  bankHeader_t header;
   int index;
 } codaBankInfo;
+
+typedef struct CodaSegmentInfoStruct
+{
+  int length;
+  segmentHeader_t header;
+  int index;
+} codaSegmentInfo;
+
+typedef struct BankConfigStruct
+{
+  int length;
+  bankHeader_t header;
+  int rocID;
+  int    endian;
+  int    isBlocked;
+  unsigned int module_header;
+  unsigned int header_mask;
+  void  *firstPassRoutine;
+} simpleBankConfig;
 
 typedef struct RocBankStruct
 {
   int length;
-  int ID;
+  bankHeader_t header;
   int index;
-  int blockLevel;
-  int type;
   int nbanks;  // FIXME: Make sure this is set
   codaBankInfo dataBank[SIMPLE_MAX_BANKS];
 } rocBankInfo;
 
-typedef struct TriggerSegmentStruct
+typedef struct TriggerBankStruct
 {
   int length;
-  int ID;
+  bankHeader_t header;
   int index;
-  int type;
   int nrocs;  // FIXME: Make sure this is set
-  codaBankInfo segTime;
-  codaBankInfo segEvType;
-  codaBankInfo segRoc[SIMPLE_MAX_ROCS];
-} trigSegInfo;
+  codaSegmentInfo segTime;
+  codaSegmentInfo segEvType;
+  codaSegmentInfo segRoc[SIMPLE_MAX_ROCS];
+} trigBankInfo;
 
 typedef struct BankDataStruct
 {
   int rocID;
   int bankID;
-  int slotNumber;
   int blkIndex;
+  int blkLevel;
   int evtCounter;
-  int evtIndex[SIMPLE_MAX_BLOCKLEVEL+1];
-  int evtLength[SIMPLE_MAX_BLOCKLEVEL+1];
+  unsigned int slotMask;
+  int evtIndex[SIMPLE_MAX_SLOTS][SIMPLE_MAX_BLOCKLEVEL+1];
+  int evtLength[SIMPLE_MAX_SLOTS][SIMPLE_MAX_BLOCKLEVEL+1];
 } bankDataInfo;
-
-typedef struct CodaEventBankInfoStruct
-{
-  int length;
-  int ID;
-  int index;
-} codaEventBankInfo;
-
-typedef struct TriggerDataStruct
-{
-  int type;
-  int index;
-  int length;
-  int number;
-} trigData;
 
 typedef struct ModuleDataStruct
 {
@@ -211,14 +301,29 @@ typedef struct OtherBankStruct
 
 
 int  simpleInit();
-void simpleConfigEndianInOut(int in_end, int out_end);
+
 void simpleConfigSetDebug(int dbMask);
-int  simpleConfigModule(int type, int ID, void *firstPassRoutine);
+
+int  simpleConfigBank(int rocID, int tag, int num,
+		 int endian, int isBlocked, void *firstPassRoutine);
+
 int  simpleConfigIgnoreUndefinedBlocks(int ignore);
-int  simpleUnblock(volatile unsigned int *idata, volatile unsigned int *sdata, int nwords);
 
 int  simpleScan(volatile unsigned int *data, int nwords);
 int  simpleScanCodaEvent(volatile unsigned int *data);
 int  simpleScanBank(volatile unsigned int *data, int rocID, int bankNumber);
+
+int simpleGetRocBanks(int rocID, int *bankList);
+int simpleGetRocSlotmask(int rocID, unsigned int *slotmask);
+int simpleGetRocBlockLevel(int rocID, int *blockLevel);
+
+int simpleGetSlotBankHeader(int rocID, int bank, int slot, unsigned int *header);
+int simpleGetSlotEventHeader(int rocID, int bank, int slot, int evt, unsigned int *header);
+int simpleGetSlotEventData(int rocID, int bank, int slot, int evt, unsigned int *buffer);
+int simpleGetSlotBankTrailer(int rocID, int bank, int slot, unsigned int *trailer);
+
+int simpleGetTriggerBankTimeSegment(unsigned long long int *buffer, unsigned int *header);
+int simpleGetTriggerBankTypeSegment(unsigned short *buffer, unsigned int *header);
+int simpleGetTriggerBankRocSegment(int rocID, unsigned int *buffer, unsigned int *header);
 
 #endif /* __SIMPLELIBH__ */
