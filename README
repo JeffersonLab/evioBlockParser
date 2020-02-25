@@ -27,7 +27,7 @@ Example usage:
 
 * Scan over the buffer with simple:
 
-  simpleScan(buf, bufLene);
+  simpleScan(buf, bufLen);
 
 * Grab the Trigger Bank data.
 
@@ -73,3 +73,11 @@ Example usage:
 	 }
 
     }
+
+
+* Other useful routines
+
+int simpleGetRocSlotmask(int rocID, int bankID, unsigned int *slotmask);
+int simpleGetSlotBlockHeader(int rocID, int bank, int slot, unsigned int *header);
+int simpleGetSlotEventHeader(int rocID, int bank, int slot, int evt, unsigned int *header);
+int simpleGetSlotBlockTrailer(int rocID, int bank, int slot, unsigned int *trailer);
