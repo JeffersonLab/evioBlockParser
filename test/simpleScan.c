@@ -98,7 +98,7 @@ main(int argc, char **argv)
 	  simpleScan(buf, nWords);
 
 	  unsigned int *try;
-	  simpleGetSlotEventData(1,4,13,1,(unsigned int *)&try);
+	  simpleGetSlotEventData(1,4,13,1,&try);
 	  printf("try = 0x%08x\n", try[1]);
 
 	  simpleGetSlotBlockHeader(1,4,16, &try[0]);
@@ -112,6 +112,52 @@ main(int argc, char **argv)
 
 	  simpleGetSlotBlockTrailer(1, 3, 3, &try[0]);
 	  printf("try = 0x%08x\n", (try[0]));
+
+	  int len, iword;
+	  unsigned long long *bufll;
+	  len = simpleGetTriggerBankTimeSegment(&bufll);
+	  if(len > 0)
+	    {
+	      for(iword = 0; iword < len; iword++)
+	      {
+		printf("[%6d  0x%llx]\n",
+		       iword, bufll[iword]);
+	      }
+	    }
+	  else
+	    {
+	      printf("len = %d\n", len);
+	    }
+
+	  unsigned short *bufs;
+	  len = simpleGetTriggerBankTypeSegment(&bufs);
+	  if(len > 0)
+	    {
+	      for(iword = 0; iword < len; iword++)
+	      {
+		printf("[%6d  0x%x]\n",
+		       iword, bufs[iword]);
+	      }
+	    }
+	  else
+	    {
+	      printf("len = %d\n", len);
+	    }
+
+	  unsigned int *bufi;
+	  len = simpleGetTriggerBankRocSegment(1,&bufi);
+	  if(len > 0)
+	    {
+	      for(iword = 0; iword < len; iword++)
+	      {
+		printf("[%6d  0x%x]\n",
+		       iword, bufi[iword]);
+	      }
+	    }
+	  else
+	    {
+	      printf("len = %d\n", len);
+	    }
 	}
     }
 

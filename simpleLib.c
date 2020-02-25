@@ -656,6 +656,17 @@ simpleGetRocBanks(int rocID, int bankID, int *bankList)
   return 0;
 }
 
+/**
+ * @ingroup Data Access
+ * @brief Return the slotmask from the specified rocID and bankID
+ *
+ * @param rocID      Which ROC bank to find the slotmask
+ * @param bankID     Which Bank to find the slotmask
+ * @param *slotmask  Where to store the slotmask
+ *
+ * @return 1 if successful, otherwise ERROR
+ */
+
 int
 simpleGetRocSlotmask(int rocID, int bankID, unsigned int *slotmask)
 {
@@ -665,6 +676,17 @@ simpleGetRocSlotmask(int rocID, int bankID, unsigned int *slotmask)
 
   return 1;
 }
+
+/**
+ * @ingroup Data Access
+ * @brief Return the block level from the specified rocID and bankID
+ *
+ * @param rocID        Which ROC bank to find the block level
+ * @param bankID       Which Bank to find the block level
+ * @param *blockLevel  Where to store the block level
+ *
+ * @return 1 if successful, otherwise ERROR
+ */
 
 int
 simpleGetRocBlockLevel(int rocID, int bankID, int *blockLevel)
@@ -676,6 +698,17 @@ simpleGetRocBlockLevel(int rocID, int bankID, int *blockLevel)
   return 1;
 }
 
+/**
+ * @ingroup Data Access
+ * @brief Return the block header from the specified rocID, bankID, and slot number
+ *
+ * @param rocID        Which ROC bank to find the block header
+ * @param bankID       Which Bank to find the block header
+ * @param slot         Which slot to find the block header
+ * @param *header      Where to store the block header
+ *
+ * @return 1 if successful, otherwise ERROR
+ */
 
 int
 simpleGetSlotBlockHeader(int rocID, int bankID, int slot, unsigned int *header)
@@ -694,6 +727,20 @@ simpleGetSlotBlockHeader(int rocID, int bankID, int slot, unsigned int *header)
   return 1;
 }
 
+/**
+ * @ingroup Data Access
+ * @brief Return the Event header from the specified rocID, bankID, and slot
+ *        for the specified event within a block
+ *
+ * @param rocID        Which ROC bank to find the event header
+ * @param bankID       Which Bank to find the event header
+ * @param slot         Which slot to find the event header
+ * @param evt          Which event within the block to find the event header
+ * @param *header  Where to store the event header
+ *
+ * @return 1 if successful, otherwise ERROR
+ */
+
 int
 simpleGetSlotEventHeader(int rocID, int bankID, int slot, int evt, unsigned int *header)
 {
@@ -711,22 +758,50 @@ simpleGetSlotEventHeader(int rocID, int bankID, int slot, int evt, unsigned int 
   return 1;
 }
 
+/**
+ * @ingroup Data Access
+ * @brief Return the buffer to the part of the data with specified rocID,
+ *         bankID, and slot number, and event of the block.
+ *
+ * @param rocID        Which ROC bank to find the buffer
+ * @param bankID       Which Bank to find the buffer
+ * @param slot         Which slot to find the buffer
+ * @param evt          Which event within the block to find the buffer
+ * @param **buffer     Where to store the address of the buffer
+ *
+ * @return Length of the buffer if successful, otherwise ERROR
+ */
+
 int
-simpleGetSlotEventData(int rocID, int bankID, int slot, int evt, unsigned int *buffer)
+simpleGetSlotEventData(int rocID, int bankID, int slot, int evt, unsigned int **buffer)
 {
   int length = 0;
+  unsigned long addr = 0;
+
   CHECKROCID(rocID, bankID);
 
   if( (bankData[rocID][bankID].slotMask & (1 << slot)) == 0 )
      return -1;
 
-  *buffer = (unsigned long)((unsigned int *)dataAddr +
-	     bankData[rocID][bankID].evtIndex[slot][evt]);
+  addr = (unsigned long)((unsigned int *)dataAddr + bankData[rocID][bankID].evtIndex[slot][evt]);
+  *buffer = (unsigned int *) addr;
 
   length = bankData[rocID][bankID].evtLength[slot][evt];
 
   return length;
 }
+
+/**
+ * @ingroup Data Access
+ * @brief Return the block trailer from the specified rocID, bankID, and slot number
+ *
+ * @param rocID        Which ROC bank to find the block trailer
+ * @param bankID       Which Bank to find the block trailer
+ * @param slot         Which slot to find the block trailer
+ * @param *trailer     Where to store the block trailer
+ *
+ * @return 1 if successful, otherwise ERROR
+ */
 
 int
 simpleGetSlotBlockTrailer(int rocID, int bankID, int slot, unsigned int *trailer)
@@ -745,20 +820,73 @@ simpleGetSlotBlockTrailer(int rocID, int bankID, int slot, unsigned int *trailer
   return 1;
 }
 
-int
-simpleGetTriggerBankTimeSegment(unsigned long long int *buffer, unsigned int *header)
-{
-  return 0;
-}
+/**
+ * @ingroup Data Access
+ * @brief Return the buffer to the Trigger Bank's Run number and Timestamp segment
+ *
+ * @param **buffer     Where to store the address of the buffer
+ *
+ * @return Length of the buffer if successful, otherwise ERROR
+ */
 
 int
-simpleGetTriggerBankTypeSegment(unsigned short *buffer, unsigned int *header)
+simpleGetTriggerBankTimeSegment(unsigned long long **buffer)
 {
-  return 0;
+  int len = 0;
+  unsigned long addr = (unsigned long)((unsigned int *)dataAddr + trigBank.segTime.index);
+
+  *buffer = (unsigned long long int *)addr;
+  len = trigBank.segTime.header.bf.num >> 1;
+
+  return len;
 }
 
+/**
+ * @ingroup Data Access
+ * @brief Return the buffer to the Trigger Bank's Event Type segment
+ *
+ * @param **buffer     Where to store the address of the buffer
+ *
+ * @return Length of the buffer if successful, otherwise ERROR
+ */
+
 int
-simpleGetTriggerBankRocSegment(int rocID, unsigned int *buffer, unsigned int *header)
+simpleGetTriggerBankTypeSegment(unsigned short **buffer)
 {
-  return 0;
+  int len = 0;
+  unsigned long addr = (unsigned long)((unsigned int *)dataAddr + trigBank.segEvType.index);
+
+  *buffer = (unsigned short *)addr;
+  len = trigBank.segEvType.header.bf.num << 1;
+
+  return len;
+}
+
+/**
+ * @ingroup Data Access
+ * @brief Return the buffer to the Trigger Bank's ROC segment
+ *
+ * @param rocID        Which roc ID to find the buffer
+ * @param **buffer     Where to store the address of the buffer
+ *
+ * @return Length of the buffer if successful, otherwise ERROR
+ */
+
+int
+simpleGetTriggerBankRocSegment(int rocID, unsigned int **buffer)
+{
+  int len = 0;
+  unsigned long addr = 0;
+
+  if(trigBank.segRoc[rocID].header.bf.tag != rocID)
+    {
+      return -1;
+    }
+
+  addr = (unsigned long)((unsigned int *)dataAddr + trigBank.segRoc[rocID].index);
+  *buffer = (unsigned int *) addr;
+
+  len = trigBank.segRoc[rocID].header.bf.num;
+
+  return len;
 }

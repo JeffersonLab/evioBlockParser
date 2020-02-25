@@ -311,11 +311,11 @@ int simpleGetRocBlockLevel(int rocID, int bankID, int *blockLevel);
 
 int simpleGetSlotBlockHeader(int rocID, int bank, int slot, unsigned int *header);
 int simpleGetSlotEventHeader(int rocID, int bank, int slot, int evt, unsigned int *header);
-int simpleGetSlotEventData(int rocID, int bank, int slot, int evt, unsigned int *buffer);
+int simpleGetSlotEventData(int rocID, int bank, int slot, int evt, unsigned int **buffer);
 int simpleGetSlotBlockTrailer(int rocID, int bank, int slot, unsigned int *trailer);
 
-int simpleGetTriggerBankTimeSegment(unsigned long long int *buffer, unsigned int *header);
-int simpleGetTriggerBankTypeSegment(unsigned short *buffer, unsigned int *header);
-int simpleGetTriggerBankRocSegment(int rocID, unsigned int *buffer, unsigned int *header);
+int simpleGetTriggerBankTimeSegment(unsigned long long **buffer);
+int simpleGetTriggerBankTypeSegment(unsigned short **buffer);
+int simpleGetTriggerBankRocSegment(int rocID, unsigned int **buffer);
 
 #endif /* __SIMPLELIBH__ */
