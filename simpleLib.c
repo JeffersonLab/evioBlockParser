@@ -99,16 +99,20 @@ simpleConfigSetDebug(int dbMask)
 
 /**
  * @ingroup Config
- * @brief Configure Module Prescription for Unblocking
+ * @brief Configure Banks to be indexed
  *
- * @param tag               Bank tag that contains the module data
+ * @param rocID             roc ID
+ * @param bankID            Bank ID
+ * @param num               NOT USED
+ * @param endian            little = 0, big = 1
+ * @param isBlocked         no = 0, yes = 1
  * @param firstPassRoutine  Routine to call for first pass processing
  *
  * @return OK if successful, otherwise ERROR
  */
 
 int
-simpleConfigBank(int rocID, int tag, int num,
+simpleConfigBank(int rocID, int bankID, int num,
 		 int endian, int isBlocked, void *firstPassRoutine)
 {
 
@@ -118,7 +122,7 @@ simpleConfigBank(int rocID, int tag, int num,
     }
 
   uBank[nubanks].rocID             = rocID;
-  uBank[nubanks].header.bf.tag     = tag;
+  uBank[nubanks].header.bf.tag     = bankID;
   uBank[nubanks].header.bf.num     = num;
   uBank[nubanks].endian            = endian;
   uBank[nubanks].isBlocked         = isBlocked;

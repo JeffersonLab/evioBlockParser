@@ -291,6 +291,10 @@ typedef struct OtherBankStruct
   int once;
 } otherBankInfo;
 
+/* prototypes */
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 int  simpleInit();
 
@@ -317,5 +321,9 @@ int simpleGetSlotBlockTrailer(int rocID, int bank, int slot, unsigned int *trail
 int simpleGetTriggerBankTimeSegment(unsigned long long **buffer);
 int simpleGetTriggerBankTypeSegment(unsigned short **buffer);
 int simpleGetTriggerBankRocSegment(int rocID, unsigned int **buffer);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __SIMPLELIBH__ */
