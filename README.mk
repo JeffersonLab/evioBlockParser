@@ -1,5 +1,5 @@
 
-SIMPLE
+# SIMPLE
 
 This library started out as an library that "unblocked" or
 "disentanlged" events in a secondary readout list.  It's now turned
@@ -7,14 +7,16 @@ into a library that indexes a CODA 3 event to make it easier to get to
 events sequentially.
 
 
-Example usage:
+## Example usage:
 
 * Initialize library and configure what ROCs to expect, and their banks:
 
+```C
   simpleInit();
 
   int rocID = 1, bankID = 0x3, endian = 0;
   simpleConfigBank(rocID, bankID, endian);
+```
 
 ** if the data is in bigendian, just set endian = 1.
    This does not modify the data.  It just informs simple that the
@@ -23,14 +25,19 @@ Example usage:
 
 * Get an event from EVIO:
 
+```C
   evReadAlloc(handle, &buf, &bufLen);
+```
 
 * Scan over the buffer with simple:
 
+```C
   simpleScan(buf, bufLen);
+```
 
 * Grab the Trigger Bank data.
 
+```C
   int len;
   unsigned long long *buf_ll;
   len = simpleGetTriggerBankTimeSegment(&buf_ll); // Event number + Timestamp
@@ -41,17 +48,21 @@ Example usage:
   unsigned int *buf_i;
   rocID = 1;
   len = simpleGetTriggerBankTimeSegment(rocID, &buf_i); // Misc ROC data
+```
 
 ** From this info, you should be able to get the block level.  If not:
 
 * Grab the Block level:
 
+```C
   rocID = 1; bankID = 3;
   unsigned int blockLevel;
   simpleGetRocBlockLevel(rocID, bankID, &blockLevel)
+```
 
 * Loop through events in the block:
 
+```C
   int iev;
   for(iev = 0; iev < blockLevel; iev++)
     {
@@ -73,11 +84,14 @@ Example usage:
 	 }
 
     }
+```
 
 
 * Other useful routines
 
+```C
 int simpleGetRocSlotmask(int rocID, int bankID, unsigned int *slotmask);
 int simpleGetSlotBlockHeader(int rocID, int bank, int slot, unsigned int *header);
 int simpleGetSlotEventHeader(int rocID, int bank, int slot, int evt, unsigned int *header);
 int simpleGetSlotBlockTrailer(int rocID, int bank, int slot, unsigned int *trailer);
+```
