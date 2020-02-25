@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <byteswap.h>
 #include "evio.h"
 #include "simpleLib.h"
 
@@ -39,6 +40,13 @@ main(int argc, char **argv)
       printf("status = 0x%x\n", status);
     }
 
+  simpleInit();
+  simpleConfigBank(3, 0x56, 20,
+		 1, 1, NULL);
+  simpleConfigBank(3, 0x11, 20,
+		 1, 0, NULL);
+  simpleConfigBank(3, 0x12, 20,
+		 1, 0, NULL);
 
   while((status = evReadAlloc(handle, &buf, &bufLen)) == 0)
     {				/* read the event and allocate the correct size buffer */
@@ -88,6 +96,22 @@ main(int argc, char **argv)
       if(pe)
 	{
 	  simpleScan(buf, nWords);
+
+	  unsigned int *try;
+	  simpleGetSlotEventData(1,4,13,1,(unsigned int *)&try);
+	  printf("try = 0x%08x\n", try[1]);
+
+	  simpleGetSlotBlockHeader(1,4,16, &try[0]);
+	  printf("try = 0x%08x\n", try[0]);
+
+	  simpleGetSlotEventHeader(1,4,16, 3, &try[0]);
+	  printf("try = 0x%08x\n", try[0]);
+
+	  simpleGetSlotEventHeader(3, 0x56,11, 3, &try[0]);
+	  printf("try = 0x%08x\n", bswap_32(try[0]));
+
+	  simpleGetSlotBlockTrailer(1, 3, 3, &try[0]);
+	  printf("try = 0x%08x\n", (try[0]));
 	}
     }
 

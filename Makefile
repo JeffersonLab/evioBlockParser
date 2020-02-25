@@ -8,18 +8,28 @@
 # SVN: $Rev$
 #
 # Uncomment DEBUG line, to include some debugging info ( -g and -Wall)
-DEBUG=1
-#
-LINUXVME_LIB		?= /site/coda/3.10/linuxvme/lib
-LINUXVME_INC		?= /site/coda/3.10/linuxvme/include
 
+BASENAME=simple
+#
+# Uncomment DEBUG line, to include some debugging info ( -g and -Wall)
+DEBUG	?= 1
+QUIET	?= 1
+#
+ifeq ($(QUIET),1)
+        Q = @
+else
+        Q =
+endif
+
+# Defs and build for Linux
 CC			= gcc
 AR                      = ar
 RANLIB                  = ranlib
-CFLAGS			= -I. -I${LINUXVME_INC} \
-			  -L. -L${LINUXVME_LIB}
+CFLAGS			= -L.
+INCS			= -I.
 
-LIBS			= libsimple.a
+LIBS			= lib${BASENAME}.a lib${BASENAME}.so
+
 
 ifdef DEBUG
 CFLAGS			+= -Wall -g
@@ -27,24 +37,54 @@ else
 CFLAGS			+= -O2
 endif
 
-SRC			= simpleLib.c
+SRC			= ${BASENAME}Lib.c
 HDRS			= $(SRC:.c=.h)
-OBJ			= simpleLib.o
+OBJ			= ${BASENAME}Lib.o
+DEPS			= $(SRC:.c=.d)
 
-all: echoarch $(LIBS)
+all: ${LIBS}
 
-$(OBJ): $(SRC) $(HDRS)
-	$(CC) $(CFLAGS) -c -o $@ $(SRC)
+%.o: %.c
+	@echo " CC     $@"
+	${Q}$(CC) $(CFLAGS) $(INCS) -c -o $@ $(SRC)
 
-$(LIBS): $(OBJ)
-	$(CC) -fpic -shared $(CFLAGS) -o $(@:%.a=%.so) $(SRC)
-	$(AR) ruv $@ $<
-	$(RANLIB) $@
+%.so: $(SRC)
+	@echo " CC     $@"
+	${Q}$(CC) -fpic -shared $(CFLAGS) $(INCS) -o $(@:%.a=%.so) $(SRC)
+
+%.a: $(OBJ)
+	@echo " AR     $@"
+	${Q}$(AR) ru $@ $<
+	@echo " RANLIB $@"
+	${Q}$(RANLIB) $@
+
+ifeq ($(OS),LINUX)
+links: $(LIBS)
+	@echo " LN     $<"
+	${Q}ln -sf $(PWD)/$< $(LINUXVME_LIB)/$<
+	${Q}ln -sf $(PWD)/$(<:%.a=%.so) $(LINUXVME_LIB)/$(<:%.a=%.so)
+	${Q}ln -sf ${PWD}/*Lib.h $(LINUXVME_INC)
+
+install: $(LIBS)
+	@echo " CP     $<"
+	${Q}cp $(PWD)/$< $(LINUXVME_LIB)/$<
+	@echo " CP     $(<:%.a=%.so)"
+	${Q}cp $(PWD)/$(<:%.a=%.so) $(LINUXVME_LIB)/$(<:%.a=%.so)
+	@echo " CP     ${BASENAME}Lib.h"
+	${Q}cp ${PWD}/${BASENAME}Lib.h $(LINUXVME_INC)
+
+%.d: %.c
+	@echo " DEP    $@"
+	${Q}set -e; rm -f $@; \
+	$(CC) -MM -shared $(INCS) $< > $@.$$$$; \
+	sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
+	rm -f $@.$$$$
+
+-include $(DEPS)
+
+endif
 
 clean:
-	@rm -vf simpleLib.o libsimple.{a,so}
+	@rm -vf ${BASENAME}Lib.{o,d} lib${BASENAME}.{a,so}
 
-echoarch:
-	@echo "Make for $(ARCH)"
-
-.PHONY: clean echoarch
+.PHONY: clean
