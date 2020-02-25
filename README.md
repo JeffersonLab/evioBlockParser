@@ -6,6 +6,9 @@ This library started out as an library that "unblocked" or
 into a library that indexes a CODA 3 event to make it easier to get to
 events sequentially.
 
+This library should work well in C++, but will be re-written in C++ to
+take advantage of the EVIO C++ API (which could replace much of the
+bank processing).
 
 ## Example usage:
 
@@ -18,7 +21,7 @@ events sequentially.
   simpleConfigBank(rocID, bankID, endian);
 ```
 
-** if the data is in bigendian, just set endian = 1.
+ * if the data is in bigendian, just set endian = 1.
    This does not modify the data.  It just informs simple that the
    block and event headers will need to be byte-swapped before decoding
    at them.
@@ -50,7 +53,7 @@ events sequentially.
   len = simpleGetTriggerBankTimeSegment(rocID, &buf_i); // Misc ROC data
 ```
 
-** From this info, you should be able to get the block level.  If not:
+ * From this info, you should be able to get the block level.  If not:
 
 * Grab the Block level:
 
