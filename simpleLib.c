@@ -33,8 +33,8 @@ typedef void (*VOIDFUNCPTR) ();
 /* Global Variables */
 simpleDebug        simpleDebugMask=0;
 
-/* Trigger event number, start at 1 */
-unsigned int simpleTriggerNumber=1;
+/* data address provided by user */
+unsigned long dataAddr = 0;
 
 /* Trigger Bank of Segment */
 trigBankInfo trigBank;
@@ -56,7 +56,6 @@ int nubanks = 0;
 /* Other data, to be copied to only one event... or to every event in the block */
 otherBankInfo     otherBank[SIMPLE_MAX_BANKS];
 unsigned int      notherBank=0;
-
 
 /* Structure defaults */
 const simpleBankConfig BANK_CONFIG_DEFAULTS =
@@ -171,6 +170,8 @@ simpleScan(volatile unsigned int *data, int nwords)  // FIXME: Not using nwords
   memset((char *) rocBank, 0, sizeof(rocBank));
   memset((char *) bankData, 0, sizeof(bankData));
 
+  dataAddr = (unsigned long) data;
+
   /* Scan over to get Bank indices.. */
   if(simpleDebugMask & SIMPLE_SHOW_UNBLOCK)
     {
@@ -253,11 +254,12 @@ simpleScanCodaEvent(volatile unsigned int *data)
 	  return ERROR;
 	}
 
+      /* init number of rocs */
+      trigBank.nrocs = 0;
       /* Index each trigger segment */
       while(iword < (trigBank.index + trigBank.length - 1))
 	{
 	  segmentHeader_t sh;
-
 	  sh.raw = data[iword++];
 
 	  if(simpleDebugMask & SIMPLE_SHOW_SEGMENT_FOUND)
@@ -287,6 +289,7 @@ simpleScanCodaEvent(volatile unsigned int *data)
 	      {
 		trigBank.segRoc[sh.bf.tag].index = iword;
 		trigBank.segRoc[sh.bf.tag].header.raw = sh.raw;
+		trigBank.nrocs++;
 		break;
 	      }
 
@@ -342,9 +345,12 @@ simpleScanCodaEvent(volatile unsigned int *data)
 
       switch(rocBank[rocID].header.bf.type)
 	{
-	case EVIO_BANK:
+	case EVIO_BANK: /* Roc Bank is a Bank of Banks */
 	  {
-	    /* Determine lengths and indices of each bank */
+	    rocBank[rocID].nbanks = 0;
+
+	    /* Inside the ROC bank.
+	       Look for data banks and determine their lengths and indices */
 	    while(iword < (rocBank[rocID].index + rocBank[rocID].length - 1))
 	      {
 		bankHeader_t dataBankHeader;
@@ -355,14 +361,17 @@ simpleScanCodaEvent(volatile unsigned int *data)
 		dataBankIndex  = iword;
 		dataBankID = dataBankHeader.bf.tag;
 
+		/* We save the bank header and length in the struct,
+		   so .index and .length here refer to the data inside */
 		rocBank[rocID].dataBank[dataBankID].length = dataBankLength;
 		rocBank[rocID].dataBank[dataBankID].index  = dataBankIndex;
 		rocBank[rocID].dataBank[dataBankID].header.raw = dataBankHeader.raw;
+		rocBank[rocID].nbanks++;
 
 #ifdef FIGUREITOUT
-		//FIXME:
 		if(ignoreUndefinedBanks)
 		  {
+		    // FIXME: need to check vs configured banks
 		    if( rocBank[rocID].dataBank[dataBankID].ID )
 		      {
 			if(simpleDebugMask & SIMPLE_SHOW_IGNORED_BANKS)
@@ -398,7 +407,7 @@ simpleScanCodaEvent(volatile unsigned int *data)
 	    break;
 	  }
 
-	case EVIO_UINT32:
+	case EVIO_UINT32:  /* Roc Bank is a Bank of uint32s, skipped for now */
 	  {
 	    printf("%s: ERROR: Bank type 0x%x not supported\n",
 		   __FUNCTION__,bank_type);
@@ -455,6 +464,18 @@ simpleScanBank(volatile unsigned int *data, int rocID, int bankNumber)
 
   blkCounter = 0;
 
+  /* Check if this rocID and bankNumber combo were found in simpleScanCodaEvent */
+  if( (rocBank[rocID].header.bf.tag != rocID) ||
+      (rocBank[rocID].dataBank[bankNumber].header.bf.tag != bankNumber) )
+    {
+      if(simpleDebugMask & SIMPLE_SHOW_BANK_NOT_FOUND)
+	{
+	  printf("%s: rocID = 0x%x, bankNumber = 0x%x NOT found\n",
+		 __func__, rocID, bankNumber);
+	}
+      return -1;
+    }
+
   iword = rocBank[rocID].dataBank[bankNumber].index;
   nwords = iword + rocBank[rocID].dataBank[bankNumber].length;
 
@@ -491,7 +512,7 @@ simpleScanBank(volatile unsigned int *data, int rocID, int bankNumber)
 		bankData[rocID][bankNumber].evtCounter = 0; /* Initialize the event counter */
 		slotNumber = bheader.bf.slot_number;
 
-		bankData[rocID][bankNumber].blkIndex   = iword;
+		bankData[rocID][bankNumber].blkIndex[slotNumber] = iword;
 		bankData[rocID][bankNumber].blkLevel   = bheader.bf.number_of_events_in_block;
 
 		if(simpleDebugMask & SIMPLE_SHOW_BLOCK_HEADER)
@@ -510,6 +531,7 @@ simpleScanBank(volatile unsigned int *data, int rocID, int bankNumber)
 	    case BLOCK_TRAILER: /* 1: BLOCK TRAILER */
 	      {
 		btrailer.raw = jdata.raw;
+		bankData[rocID][bankNumber].blkTrailerIndex[slotNumber] = iword;
 
 		if(simpleDebugMask & SIMPLE_SHOW_BLOCK_TRAILER)
 		  {
@@ -546,14 +568,14 @@ simpleScanBank(volatile unsigned int *data, int rocID, int bankNumber)
 
 		/* Check the number of words vs. words counted within the block */
 		if(btrailer.bf.words_in_block !=
-		   (iword - bankData[rocID][bankNumber].blkIndex+1) )
+		   (iword - bankData[rocID][bankNumber].blkIndex[slotNumber]+1) )
 		  {
 		    printf("[%6d  0x%08x] "
 			   "ERROR: trailer #words %d != actual #words %d\n",
 			   iword,
 			   btrailer.raw,
 			   btrailer.bf.words_in_block,
-			   iword-bankData[rocID][bankNumber].blkIndex+1);
+			   iword-bankData[rocID][bankNumber].blkIndex[slotNumber]+1);
 		    rval = ERROR;
 		  }
 
@@ -618,48 +640,109 @@ simpleScanBank(volatile unsigned int *data, int rocID, int bankNumber)
   return rval;
 }
 
+#define CHECKROCID(x,y)				\
+  {						\
+    if(bankData[x][y].rocID != x)		\
+      return -1;				\
+  }
+
+
 /* Data access routines */
 int
-simpleGetRocBanks(int rocID, int *bankList)
+simpleGetRocBanks(int rocID, int bankID, int *bankList)
 {
+  CHECKROCID(rocID,bankID);
+
   return 0;
 }
 
 int
-simpleGetRocSlotmask(int rocID, unsigned int *slotmask)
+simpleGetRocSlotmask(int rocID, int bankID, unsigned int *slotmask)
 {
-  return 0;
+  CHECKROCID(rocID,bankID);
+
+  *slotmask = bankData[rocID][bankID].slotMask;
+
+  return 1;
 }
 
 int
-simpleGetRocBlockLevel(int rocID, int *blockLevel)
+simpleGetRocBlockLevel(int rocID, int bankID, int *blockLevel)
 {
-  return 0;
+  CHECKROCID(rocID, bankID);
+
+  *blockLevel = bankData[rocID][bankID].blkLevel;
+
+  return 1;
 }
 
 
 int
-simpleGetSlotBankHeader(int rocID, int bank, int slot, unsigned int *header)
+simpleGetSlotBlockHeader(int rocID, int bankID, int slot, unsigned int *header)
 {
-  return 0;
+  int index;
+  unsigned int *bufPtr = (unsigned int *)dataAddr;
+
+  CHECKROCID(rocID, bankID);
+
+  if( (bankData[rocID][bankID].slotMask & (1 << slot)) == 0 )
+     return -1;
+
+  index = bankData[rocID][bankID].blkIndex[slot];
+  *header = bufPtr[index];
+
+  return 1;
 }
 
 int
-simpleGetSlotEventHeader(int rocID, int bank, int slot, int evt, unsigned int *header)
+simpleGetSlotEventHeader(int rocID, int bankID, int slot, int evt, unsigned int *header)
 {
-  return 0;
+  int index;
+  unsigned int *bufPtr = (unsigned int *)dataAddr;
+
+  CHECKROCID(rocID, bankID);
+
+  if( (bankData[rocID][bankID].slotMask & (1 << slot)) == 0 )
+     return -1;
+
+  index = bankData[rocID][bankID].evtIndex[slot][evt];
+  *header = bufPtr[index];
+
+  return 1;
 }
 
 int
-simpleGetSlotEventData(int rocID, int bank, int slot, int evt, unsigned int *buffer)
+simpleGetSlotEventData(int rocID, int bankID, int slot, int evt, unsigned int *buffer)
 {
-  return 0;
+  int length = 0;
+  CHECKROCID(rocID, bankID);
+
+  if( (bankData[rocID][bankID].slotMask & (1 << slot)) == 0 )
+     return -1;
+
+  *buffer = (unsigned long)((unsigned int *)dataAddr +
+	     bankData[rocID][bankID].evtIndex[slot][evt]);
+
+  length = bankData[rocID][bankID].evtLength[slot][evt];
+
+  return length;
 }
 
 int
-simpleGetSlotBankTrailer(int rocID, int bank, int slot, unsigned int *trailer)
+simpleGetSlotBlockTrailer(int rocID, int bankID, int slot, unsigned int *trailer)
 {
-  return 0;
+  int index;
+  unsigned int *bufPtr = (unsigned int *)dataAddr;
+
+  CHECKROCID(rocID, bankID);
+
+  if( (bankData[rocID][bankID].slotMask & (1 << slot)) == 0 )
+     return -1;
+
+  index = bankData[rocID][bankID].blkTrailerIndex[slot];
+  *trailer = bufPtr[index];
+
+  return 1;
 }
 
 int

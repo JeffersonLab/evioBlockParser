@@ -193,7 +193,8 @@ typedef enum simpleDebugType
     SIMPLE_SHOW_SECOND_PASS      = (1<<7),
     SIMPLE_SHOW_UNBLOCK          = (1<<8),
     SIMPLE_SHOW_IGNORED_BANKS    = (1<<9),
-    SIMPLE_SHOW_SEGMENT_FOUND    = (1<<10)
+    SIMPLE_SHOW_SEGMENT_FOUND    = (1<<10),
+    SIMPLE_SHOW_BANK_NOT_FOUND   = (1<<11)
   } simpleDebug;
 
 typedef struct
@@ -255,7 +256,8 @@ typedef struct RocBankStruct
   int length;
   bankHeader_t header;
   int index;
-  int nbanks;  // FIXME: Make sure this is set
+  int rocID;
+  int nbanks;
   codaBankInfo dataBank[SIMPLE_MAX_BANKS];
 } rocBankInfo;
 
@@ -264,7 +266,7 @@ typedef struct TriggerBankStruct
   int length;
   bankHeader_t header;
   int index;
-  int nrocs;  // FIXME: Make sure this is set
+  int nrocs;
   codaSegmentInfo segTime;
   codaSegmentInfo segEvType;
   codaSegmentInfo segRoc[SIMPLE_MAX_ROCS];
@@ -274,24 +276,14 @@ typedef struct BankDataStruct
 {
   int rocID;
   int bankID;
-  int blkIndex;
+  int blkIndex[SIMPLE_MAX_SLOTS];
+  int blkTrailerIndex[SIMPLE_MAX_SLOTS];
   int blkLevel;
   int evtCounter;
   unsigned int slotMask;
   int evtIndex[SIMPLE_MAX_SLOTS][SIMPLE_MAX_BLOCKLEVEL+1];
   int evtLength[SIMPLE_MAX_SLOTS][SIMPLE_MAX_BLOCKLEVEL+1];
 } bankDataInfo;
-
-typedef struct ModuleDataStruct
-{
-  int rocID;
-  int bankID;
-  int slotNumber;
-  int blkIndex;
-  int evtCounter;
-  int evtIndex[SIMPLE_MAX_BLOCKLEVEL+1];
-  int evtLength[SIMPLE_MAX_BLOCKLEVEL+1];
-} modData;
 
 typedef struct OtherBankStruct
 {
@@ -313,14 +305,14 @@ int  simpleScan(volatile unsigned int *data, int nwords);
 int  simpleScanCodaEvent(volatile unsigned int *data);
 int  simpleScanBank(volatile unsigned int *data, int rocID, int bankNumber);
 
-int simpleGetRocBanks(int rocID, int *bankList);
-int simpleGetRocSlotmask(int rocID, unsigned int *slotmask);
-int simpleGetRocBlockLevel(int rocID, int *blockLevel);
+int simpleGetRocBanks(int rocID, int bankID, int *bankList);
+int simpleGetRocSlotmask(int rocID, int bankID, unsigned int *slotmask);
+int simpleGetRocBlockLevel(int rocID, int bankID, int *blockLevel);
 
-int simpleGetSlotBankHeader(int rocID, int bank, int slot, unsigned int *header);
+int simpleGetSlotBlockHeader(int rocID, int bank, int slot, unsigned int *header);
 int simpleGetSlotEventHeader(int rocID, int bank, int slot, int evt, unsigned int *header);
 int simpleGetSlotEventData(int rocID, int bank, int slot, int evt, unsigned int *buffer);
-int simpleGetSlotBankTrailer(int rocID, int bank, int slot, unsigned int *trailer);
+int simpleGetSlotBlockTrailer(int rocID, int bank, int slot, unsigned int *trailer);
 
 int simpleGetTriggerBankTimeSegment(unsigned long long int *buffer, unsigned int *header);
 int simpleGetTriggerBankTypeSegment(unsigned short *buffer, unsigned int *header);
