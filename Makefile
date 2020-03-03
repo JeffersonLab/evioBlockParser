@@ -3,14 +3,19 @@
 #    Makefile
 #
 # Description:
-#    Makefile for the SIMPLE library
+#    Makefile for the evioBlockParser library
 #
 # SVN: $Rev$
 #
 # Uncomment DEBUG line, to include some debugging info ( -g and -Wall)
-
-BASENAME=simple
+BASENAME = evioBlockParser
 #
+#
+EVIO_LIB	?=	/site/coda/3.10/Linux-x86_64/lib
+EVIO_INC	?=	/site/coda/3.10/Linux-x86_64/include
+
+#
+
 # Uncomment DEBUG line, to include some debugging info ( -g and -Wall)
 DEBUG	?= 1
 QUIET	?= 1
@@ -21,12 +26,11 @@ else
         Q =
 endif
 
-# Defs and build for Linux
-CC			= gcc
+CC			= g++
 AR                      = ar
 RANLIB                  = ranlib
-CFLAGS			= -L.
-INCS			= -I.
+CFLAGS			= -L. -L${EVIO_LIB}
+INCS			= -I. -I${EVIO_INC}
 
 LIBS			= lib${BASENAME}.a lib${BASENAME}.so
 
@@ -37,14 +41,14 @@ else
 CFLAGS			+= -O2
 endif
 
-SRC			= ${BASENAME}Lib.c
-HDRS			= $(SRC:.c=.h)
-OBJ			= ${BASENAME}Lib.o
-DEPS			= $(SRC:.c=.d)
+SRC			= ${BASENAME}.cc
+HDRS			= $(SRC:.cc=.hxx)
+OBJ			= ${BASENAME}.o
+DEPS			= $(SRC:.cc=.d)
 
 all: ${LIBS}
 
-%.o: %.c
+%.o: %.cc
 	@echo " CC     $@"
 	${Q}$(CC) $(CFLAGS) $(INCS) -c -o $@ $(SRC)
 
@@ -58,22 +62,7 @@ all: ${LIBS}
 	@echo " RANLIB $@"
 	${Q}$(RANLIB) $@
 
-ifeq ($(OS),LINUX)
-links: $(LIBS)
-	@echo " LN     $<"
-	${Q}ln -sf $(PWD)/$< $(LINUXVME_LIB)/$<
-	${Q}ln -sf $(PWD)/$(<:%.a=%.so) $(LINUXVME_LIB)/$(<:%.a=%.so)
-	${Q}ln -sf ${PWD}/*Lib.h $(LINUXVME_INC)
-
-install: $(LIBS)
-	@echo " CP     $<"
-	${Q}cp $(PWD)/$< $(LINUXVME_LIB)/$<
-	@echo " CP     $(<:%.a=%.so)"
-	${Q}cp $(PWD)/$(<:%.a=%.so) $(LINUXVME_LIB)/$(<:%.a=%.so)
-	@echo " CP     ${BASENAME}Lib.h"
-	${Q}cp ${PWD}/${BASENAME}Lib.h $(LINUXVME_INC)
-
-%.d: %.c
+%.d: %.cc
 	@echo " DEP    $@"
 	${Q}set -e; rm -f $@; \
 	$(CC) -MM -shared $(INCS) $< > $@.$$$$; \
@@ -82,9 +71,7 @@ install: $(LIBS)
 
 -include $(DEPS)
 
-endif
-
 clean:
-	@rm -vf ${BASENAME}Lib.{o,d} lib${BASENAME}.{a,so}
+	@rm -vf ${OBJ} ${DEPS} ${LIBS}
 
 .PHONY: clean

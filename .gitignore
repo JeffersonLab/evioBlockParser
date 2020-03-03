@@ -1,0 +1,18 @@
+# hackery to ignore files without an extention (executables, probably)
+*
+!*/
+!*.*
+
+# tmp emacs files
+*~
+
+# deps
+*.d
+
+# object files
+*.o
+
+# libs
+*.so
+*.a
+
