@@ -312,6 +312,7 @@ int  simpleScanBank(volatile unsigned int *data, int rocID, int bankNumber);
 int simpleGetRocBanks(int rocID, int bankID, int *bankList);
 int simpleGetRocSlotmask(int rocID, int bankID, unsigned int *slotmask);
 int simpleGetRocBlockLevel(int rocID, int bankID, int *blockLevel);
+int simpleGetRocBankData(int rocID, int bankID, unsigned int **buffer);
 
 int simpleGetSlotBlockHeader(int rocID, int bank, int slot, unsigned int *header);
 int simpleGetSlotEventHeader(int rocID, int bank, int slot, int evt, unsigned int *header);

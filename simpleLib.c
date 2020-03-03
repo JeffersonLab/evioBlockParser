@@ -683,6 +683,34 @@ simpleGetRocSlotmask(int rocID, int bankID, unsigned int *slotmask)
 
 /**
  * @ingroup Data Access
+ * @brief Return the buffer to the part of the data with specified rocID,
+ *         bankID.  Use for unblocked Banks.
+ *
+ * @param rocID        Which ROC bank to find the block level
+ * @param bankID       Which Bank to find the block level
+ * @param **buffer     Where to store the address of the buffer
+ *
+ * @return Length of the buffer if successful, otherwise ERROR
+ */
+
+int
+simpleGetRocBankData(int rocID, int bankID, unsigned int **buffer)
+{
+  int length = 0;
+  unsigned long addr = 0;
+
+  CHECKROCID(rocID, bankID);
+
+  addr = (unsigned long)((unsigned int *)dataAddr + rocBank[rocID].dataBank[bankID].index);
+  *buffer = (unsigned int *) addr;
+
+  length = rocBank[rocID].dataBank[bankID].length;
+
+  return length;
+}
+
+/**
+ * @ingroup Data Access
  * @brief Return the block level from the specified rocID and bankID
  *
  * @param rocID        Which ROC bank to find the block level
@@ -730,6 +758,7 @@ simpleGetSlotBlockHeader(int rocID, int bankID, int slot, unsigned int *header)
 
   return 1;
 }
+
 
 /**
  * @ingroup Data Access

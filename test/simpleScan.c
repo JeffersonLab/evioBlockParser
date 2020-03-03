@@ -158,6 +158,21 @@ main(int argc, char **argv)
 	    {
 	      printf("len = %d\n", len);
 	    }
+
+	  len = simpleGetRocBankData(3, 0x11, &bufi);
+	  if(len > 0)
+	    {
+	      for(iword = 0; iword < len; iword++)
+	      {
+		printf("[%6d  0x%x]\n",
+		       iword, bufi[iword]);
+	      }
+	    }
+	  else
+	    {
+	      printf("len = %d\n", len);
+	    }
+
 	}
     }
 
