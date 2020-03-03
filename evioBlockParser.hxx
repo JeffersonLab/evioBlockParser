@@ -32,6 +32,16 @@ class evioBlockParser:public evioStreamParserHandler
   //
   // Typedefs for JLab data format decoding
   //
+  typedef enum jlabDataTypes
+    {
+      BLOCK_HEADER   = 0,
+      BLOCK_TRAILER  = 1,
+      EVENT_HEADER   = 2,
+      TRIGGER_TIME   = 3,
+      DATA_NOT_VALID = 14,
+      FILLER         = 15
+    } DataTypes;
+
   typedef struct
   {
     uint32_t undef:27;
@@ -93,6 +103,18 @@ class evioBlockParser:public evioStreamParserHandler
   } event_header_t;
 
   //
+  // enum for CODA Bank tags
+  //
+  enum coda_tags
+    {
+      CODA_EV_SYNC     = 0xFFD0,
+      CODA_EV_PRESTART = 0xFFD1,
+      CODA_EV_GO       = 0xFFD2,
+      CODA_EV_PAUSE    = 0xFFD3,
+      CODA_EV_END      = 0xFFD4
+    };
+
+  //
   // Typedefs for indexing banks and events
   //
   typedef struct EventInfo
@@ -126,6 +148,34 @@ class evioBlockParser:public evioStreamParserHandler
     uint32_t index;			// Index after header
     map < uint16_t, Bank_t > bankMap;
   } Roc_t;
+
+  //
+  // enum for endian flag
+  //
+  enum endian_type
+    {
+      SIMPLE_LITTLE_ENDIAN = 0,
+      SIMPLE_BIG_ENDIAN    = 1
+    };
+
+  //
+  // enum for debug flags
+  //
+  enum debug_flags
+    {
+      SIMPLE_SHOW_BLOCK_HEADER     = (1<<0),
+      SIMPLE_SHOW_BLOCK_TRAILER    = (1<<1),
+      SIMPLE_SHOW_EVENT_HEADER     = (1<<2),
+      SIMPLE_SHOW_EVENT_TIMESTAMP  = (1<<3),
+      SIMPLE_SHOW_OTHER            = (1<<4),
+      SIMPLE_SHOW_BANK_FOUND       = (1<<5),
+      SIMPLE_SHOW_FILL_EVENTS      = (1<<6),
+      SIMPLE_SHOW_SECOND_PASS      = (1<<7),
+      SIMPLE_SHOW_UNBLOCK          = (1<<8),
+      SIMPLE_SHOW_IGNORED_BANKS    = (1<<9),
+      SIMPLE_SHOW_SEGMENT_FOUND    = (1<<10),
+      SIMPLE_SHOW_BANK_NOT_FOUND   = (1<<11)
+    };
 
 public:
   evioBlockParser();
