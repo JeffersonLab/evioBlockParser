@@ -686,8 +686,8 @@ simpleGetRocSlotmask(int rocID, int bankID, unsigned int *slotmask)
  * @brief Return the buffer to the part of the data with specified rocID,
  *         bankID.  Use for unblocked Banks.
  *
- * @param rocID        Which ROC bank to find the block level
- * @param bankID       Which Bank to find the block level
+ * @param rocID        Which ROC bank to find the buffer
+ * @param bankID       Which Bank to find the buffer
  * @param **buffer     Where to store the address of the buffer
  *
  * @return Length of the buffer if successful, otherwise ERROR
