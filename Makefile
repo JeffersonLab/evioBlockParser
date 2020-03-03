@@ -29,7 +29,7 @@ endif
 CC			= g++
 AR                      = ar
 RANLIB                  = ranlib
-CFLAGS			= -L. -L${EVIO_LIB}
+CFLAGS			= -std=c++11 -L. -L${EVIO_LIB}
 INCS			= -I. -I${EVIO_INC}
 
 LIBS			= lib${BASENAME}.a lib${BASENAME}.so
