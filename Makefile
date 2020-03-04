@@ -32,7 +32,7 @@ RANLIB                  = ranlib
 CFLAGS			= -std=c++11 -L. -L${EVIO_LIB}
 INCS			= -I. -I${EVIO_INC}
 
-LIBS			= lib${BASENAME}.a lib${BASENAME}.so
+LIBS			= lib${BASENAME}.so lib${BASENAME}.a
 
 
 ifdef DEBUG

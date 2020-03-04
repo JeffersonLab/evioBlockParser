@@ -26,13 +26,12 @@
 using namespace std;
 using namespace evio;
 
-
 class evioBlockParser:public evioStreamParserHandler
 {
   //
-  // Typedefs for JLab data format decoding
+  // structs & unions for JLab data format decoding
   //
-  typedef enum jlabDataTypes
+  enum jlabDataTypes
     {
       BLOCK_HEADER   = 0,
       BLOCK_TRAILER  = 1,
@@ -40,23 +39,23 @@ class evioBlockParser:public evioStreamParserHandler
       TRIGGER_TIME   = 3,
       DATA_NOT_VALID = 14,
       FILLER         = 15
-    } DataTypes;
+    };
 
-  typedef struct
+  struct jlab_data_word
   {
     uint32_t undef:27;
     uint32_t data_type_tag:4;
     uint32_t data_type_defining:1;
-  } jlab_data_word;
+  };
 
-  typedef union
+  union jlab_data_word_t
   {
     uint32_t raw;
     jlab_data_word bf;
-  } jlab_data_word_t;
+  };
 
   // 0: BLOCK HEADER
-  typedef struct
+  struct block_header
   {
     uint32_t number_of_events_in_block:8;
     uint32_t event_block_number:10;
@@ -64,90 +63,110 @@ class evioBlockParser:public evioStreamParserHandler
     uint32_t slot_number:5;
     uint32_t data_type_tag:4;
     uint32_t data_type_defining:1;
-  } block_header;
+  };
 
-  typedef union
+  union block_header_t
   {
     uint32_t raw;
     block_header bf;
-  } block_header_t;
+  };
 
   // 1: BLOCK TRAILER
-  typedef struct
+  struct block_trailer
   {
     uint32_t words_in_block:22;
     uint32_t slot_number:5;
     uint32_t data_type_tag:4;
     uint32_t data_type_defining:1;
-  } block_trailer;
+  };
 
-  typedef union
+  union block_trailer_t
   {
     uint32_t raw;
     block_trailer bf;
-  } block_trailer_t;
+  };
 
   // 2: EVENT HEADER
-  typedef struct
+  struct event_header
   {
     uint32_t event_number:22;
     uint32_t slot_number:5;
     uint32_t data_type_tag:4;
     uint32_t data_type_defining:1;
-  } event_header;
+  };
 
-  typedef union
+  union event_header_t
   {
     uint32_t raw;
     event_header bf;
-  } event_header_t;
+  };
+
+  // Range struct used to decode CODA Bank Tag
+  struct range
+  {
+    uint16_t min;
+    uint16_t max;
+  };
+
+  // CODA Reserved Bank Tags
+  range CODA_BANK     = {0xFF00, 0xFFFF};
+  range CONTROL_EVENT = {0xFFC0, 0xFFEF};
+  range PHYSICS_EVENT = {0xFF50, 0xFF8F};
+  range TRIGGER_BANK  = {0xFF10, 0xFF4F};
+
+  /* struct & union to decode trigger bank tag */
+  struct trigger_bank
+  {
+    uint16_t timestamp:1;
+    uint16_t number:1;
+    uint16_t noSpecificData:1;
+    uint16_t __blank:1;
+    uint16_t built:1;
+    uint16_t raw:1;
+    uint16_t ___blank:10;
+  };
+
+  union trigger_bank_t
+  {
+    uint16_t raw;
+    trigger_bank bf;
+  };
+
 
   //
-  // enum for CODA Bank tags
+  // structs for indexing banks and events
   //
-  enum coda_tags
-    {
-      CODA_EV_SYNC     = 0xFFD0,
-      CODA_EV_PRESTART = 0xFFD1,
-      CODA_EV_GO       = 0xFFD2,
-      CODA_EV_PAUSE    = 0xFFD3,
-      CODA_EV_END      = 0xFFD4
-    };
-
-  //
-  // Typedefs for indexing banks and events
-  //
-  typedef struct EventInfo
+  struct Event_t
   {
     uint32_t index;			// points to event header
     uint32_t length;
-  } Event_t;
+  };
 
-  typedef struct SlotInfo
+  struct Slot_t
   {
     uint8_t slotnumber;
     uint8_t  nblockheader;
     uint32_t blockheader[2];
     uint32_t blocktrailer;
     map < uint8_t, Event_t > eventMap;
-  } Slot_t;
+  };
 
-  typedef struct DataBankInfo
+  struct Bank_t
   {
     uint32_t length;
     uint32_t header;
     uint32_t index;			// points to first data word
     uint32_t slotmask;
     map < uint8_t, Slot_t > slotMap;
-  } Bank_t;
+  };
 
-  typedef struct RocBankInfo
+  struct Roc_t
   {
     uint32_t length;
     uint32_t header;
     uint32_t index;			// Index after header
     map < uint16_t, Bank_t > bankMap;
-  } Roc_t;
+  };
 
   //
   // enum for endian flag
