@@ -136,10 +136,10 @@ class evioBlockParser:public evioStreamParserHandler
   range TRIGGER_BANK  = {0xFF10, 0xFF4F};
 
   /* struct & union to decode trigger bank tag */
-  struct trigger_bank
+  struct trigger_bank_tag
   {
     uint16_t timestamp:1;      // bit 0: Contains event timestamps
-    uint16_t number:1;         // bit 1: Contains event number (first of block)
+    uint16_t runInfo:1;        // bit 1: Contains run number and run type in 64bit segment
     uint16_t noSpecificData:1; // bit 2: No Event Specific Data (From TS/TI)
     uint16_t blank:1;
     uint16_t built:1;          // bit 4: Built trigger (from PEB, etc)
@@ -147,10 +147,40 @@ class evioBlockParser:public evioStreamParserHandler
     uint16_t ff0:10;
   };
 
-  union trigger_bank_t
+  union trigger_bank_tag_t
   {
     uint16_t raw;
-    trigger_bank bf;
+    trigger_bank_tag bf;
+  };
+
+  struct trigger_segment16_t
+  {
+    uint8_t ebID;
+    uint32_t length;
+    uint16_t *payload;
+  };
+
+  struct trigger_segment32_t
+  {
+    uint8_t ebID;
+    uint32_t length;
+    uint32_t *payload;
+  };
+
+  struct trigger_segment64_t
+  {
+    uint8_t ebID;
+    uint32_t length;
+    uint64_t *payload;
+  };
+
+  struct TriggerBank_t
+  {
+    trigger_bank_tag_t tag;
+    trigger_segment64_t timestamp;
+    trigger_segment16_t evtype;
+    uint8_t nrocs;
+    map <uint8_t, trigger_segment32_t> roc;
   };
 
 
@@ -178,6 +208,7 @@ class evioBlockParser:public evioStreamParserHandler
     uint32_t header;
     uint32_t index;			// points to first data word
     uint32_t slotmask;
+    uint32_t *payload;
     map < uint8_t, Slot_t > slotMap;
   };
 
@@ -186,7 +217,7 @@ class evioBlockParser:public evioStreamParserHandler
     uint32_t length;
     uint32_t header;
     uint32_t index;			// Index after header
-    uint32_t *payLoad;
+    uint32_t *payload;
     map < uint16_t, Bank_t > bankMap;
   };
 
@@ -209,6 +240,13 @@ class evioBlockParser:public evioStreamParserHandler
       EBP_BIG_ENDIAN    = 1
     };
 
+public:
+  evioBlockParser() {};
+  ~evioBlockParser() {};
+
+  void Parse(const uint32_t *buf);
+  void SetDebugMask(uint32_t mask) {debugMask = mask;};
+
   //
   // enum for debug flags
   //
@@ -224,20 +262,18 @@ class evioBlockParser:public evioStreamParserHandler
       SHOW_SECOND_PASS      = (1<<7),
       SHOW_UNBLOCK          = (1<<8),
       SHOW_IGNORED_BANKS    = (1<<9),
-      SHOW_SEGMENT_FOUND    = (1<<10),
-      SHOW_BANK_NOT_FOUND   = (1<<11)
+      SHOW_BANK_FOUND       = (1<<10),
+      SHOW_SEGMENT_FOUND    = (1<<11),
+      SHOW_BANK_NOT_FOUND   = (1<<12)
     };
 
-public:
-  evioBlockParser() {};
-  ~evioBlockParser() {};
-
-  void Parse(const uint32_t *buf);
-  void SetDebugMask(uint32_t mask) {debugMask = mask;};
 
 private:
   // Main storage container
   map < uint8_t, Roc_t > rocMap;
+  uint8_t blockLevel;
+
+  TriggerBank_t triggerBank;
 
   // Handler for processing Banks of segments/banks
   void *containerNodeHandler(int bankLength, int constainerType,

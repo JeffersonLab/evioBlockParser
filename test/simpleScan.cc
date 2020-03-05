@@ -47,7 +47,7 @@ main(int argc, char **argv)
 	  // stream parse the buffer
 	  cout << endl << endl << "Stream parsing event:" << endl << endl;
 	  evioBlockParser p;
-	  p.SetDebugMask(0xffff);
+	  p.SetDebugMask(0xffff &~ evioBlockParser::SHOW_NODE_FOUND);
 
 	  p.Parse(buf);
 
