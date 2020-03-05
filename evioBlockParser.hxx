@@ -26,6 +26,27 @@
 using namespace std;
 using namespace evio;
 
+#define EBP_ERROR(format, ...) {					\
+    char buf[128];							\
+    sprintf((char *)buf,format, ## __VA_ARGS__);			\
+    cerr << __func__ << ": ERROR: " << buf;				\
+  }
+
+#define EBP_SHOW(format, ...) {						\
+    char buf[128];							\
+    sprintf((char *)buf,format, ## __VA_ARGS__);			\
+    cout << buf;							\
+  }
+
+#define EBP_DEBUG(type, format, ...) {					\
+    if(type & debugMask)						\
+      {									\
+	char buf[128];							\
+	sprintf((char *)buf,format, ## __VA_ARGS__);			\
+	cout << __func__ << ": " << buf;				\
+      }									\
+  }
+
 class evioBlockParser:public evioStreamParserHandler
 {
   //
@@ -117,13 +138,13 @@ class evioBlockParser:public evioStreamParserHandler
   /* struct & union to decode trigger bank tag */
   struct trigger_bank
   {
-    uint16_t timestamp:1;
-    uint16_t number:1;
-    uint16_t noSpecificData:1;
-    uint16_t __blank:1;
-    uint16_t built:1;
-    uint16_t raw:1;
-    uint16_t ___blank:10;
+    uint16_t timestamp:1;      // bit 0: Contains event timestamps
+    uint16_t number:1;         // bit 1: Contains event number (first of block)
+    uint16_t noSpecificData:1; // bit 2: No Event Specific Data (From TS/TI)
+    uint16_t blank:1;
+    uint16_t built:1;          // bit 4: Built trigger (from PEB, etc)
+    uint16_t raw:1;            // bit 5: Raw trigger (from TS/TI)
+    uint16_t ff0:10;
   };
 
   union trigger_bank_t
@@ -165,7 +186,18 @@ class evioBlockParser:public evioStreamParserHandler
     uint32_t length;
     uint32_t header;
     uint32_t index;			// Index after header
+    uint32_t *payLoad;
     map < uint16_t, Bank_t > bankMap;
+  };
+
+  //
+  // struct to pass to container and leaf nodes
+  //
+  struct Parent_t
+  {
+    uint16_t tag;
+    uint16_t num;
+    uint8_t  type;
   };
 
   //
@@ -173,8 +205,8 @@ class evioBlockParser:public evioStreamParserHandler
   //
   enum endian_type
     {
-      SIMPLE_LITTLE_ENDIAN = 0,
-      SIMPLE_BIG_ENDIAN    = 1
+      EBP_LITTLE_ENDIAN = 0,
+      EBP_BIG_ENDIAN    = 1
     };
 
   //
@@ -182,33 +214,31 @@ class evioBlockParser:public evioStreamParserHandler
   //
   enum debug_flags
     {
-      SIMPLE_SHOW_BLOCK_HEADER     = (1<<0),
-      SIMPLE_SHOW_BLOCK_TRAILER    = (1<<1),
-      SIMPLE_SHOW_EVENT_HEADER     = (1<<2),
-      SIMPLE_SHOW_EVENT_TIMESTAMP  = (1<<3),
-      SIMPLE_SHOW_OTHER            = (1<<4),
-      SIMPLE_SHOW_BANK_FOUND       = (1<<5),
-      SIMPLE_SHOW_FILL_EVENTS      = (1<<6),
-      SIMPLE_SHOW_SECOND_PASS      = (1<<7),
-      SIMPLE_SHOW_UNBLOCK          = (1<<8),
-      SIMPLE_SHOW_IGNORED_BANKS    = (1<<9),
-      SIMPLE_SHOW_SEGMENT_FOUND    = (1<<10),
-      SIMPLE_SHOW_BANK_NOT_FOUND   = (1<<11)
+      SHOW_BLOCK_HEADER     = (1<<0),
+      SHOW_BLOCK_TRAILER    = (1<<1),
+      SHOW_EVENT_HEADER     = (1<<2),
+      SHOW_EVENT_TIMESTAMP  = (1<<3),
+      SHOW_OTHER            = (1<<4),
+      SHOW_NODE_FOUND       = (1<<5),
+      SHOW_FILL_EVENTS      = (1<<6),
+      SHOW_SECOND_PASS      = (1<<7),
+      SHOW_UNBLOCK          = (1<<8),
+      SHOW_IGNORED_BANKS    = (1<<9),
+      SHOW_SEGMENT_FOUND    = (1<<10),
+      SHOW_BANK_NOT_FOUND   = (1<<11)
     };
 
 public:
-  evioBlockParser();
-  ~evioBlockParser();
+  evioBlockParser() {};
+  ~evioBlockParser() {};
 
   void Parse(const uint32_t *buf);
+  void SetDebugMask(uint32_t mask) {debugMask = mask;};
 
 private:
   // Main storage container
   map < uint8_t, Roc_t > rocMap;
 
-  // Prescriptions for parsing the EVIO buffer
-  uint16_t node_tag;
-  uint32_t node_num;
   // Handler for processing Banks of segments/banks
   void *containerNodeHandler(int bankLength, int constainerType,
 			     int contentType, uint16_t tag, uint8_t num,
@@ -230,6 +260,9 @@ private:
   bool Check(uint8_t rocID, uint16_t bankID);
   bool Check(uint8_t rocID, uint16_t bankID, uint8_t slotnumber);
   bool Check(uint8_t rocID, uint16_t bankID, uint8_t slotnumber, uint8_t evt);
+
+  //
+  uint32_t debugMask;
 
 };
 

@@ -3,30 +3,49 @@
 #    Makefile
 #
 # Description:
-#      Build recipes for testing the simple library
+#      Build recipes for testing evioBlockParser
 #
+QUIET	?= 1
+#
+ifeq ($(QUIET),1)
+        Q = @
+else
+        Q =
+endif
 
 EVIO_INC	?= /site/coda/3.10/Linux-x86_64/include
 EVIO_LIB	?= /site/coda/3.10/Linux-x86_64/lib
 
 
 CROSS_COMPILE		=
-CC			= $(CROSS_COMPILE)gcc
+CC			= $(CROSS_COMPILE)g++
 AR                      = ar
 RANLIB                  = ranlib
-CFLAGS			= -Wall -g -I. -I.. -I${EVIO_INC} \
+INCS			= -I. -I.. -I${EVIO_INC}
+CFLAGS			= -Wall -g -std=c++11 \
 			  -L. -L.. -L${EVIO_LIB} \
-			  -lsimple -levio
+			  -levioBlockParser -levioxx -levio -lexpat
 
-PROGS			= simpleScan
+SRC			= simpleScan.cc
+PROGS			= $(SRC:.cc=)
+DEPS			= $(SRC:.cc=.d)
 
 all: $(PROGS)
 
-clean distclean:
-	@rm -f $(PROGS) *~
+clean:
+	@rm -f $(PROGS) $(DEPS) *~
 
-%: %.c
-	echo "Making $@"
-	$(CC) $(CFLAGS) -o $@ $(@:%=%.c)  -lrt
+%: %.cc
+	@echo " CC     $@"
+	${Q}$(CC) $(CFLAGS) $(INCS) -o $@ $<
 
-.PHONY: all clean distclean
+%.d: %.cc
+	@echo " DEP    $@"
+	${Q}set -e; rm -f $@; \
+	$(CC) -MM -shared $(INCS) $< > $@.$$$$; \
+	sed 's,\($*\)\.o[ :]*,\1 $@ : ,g' < $@.$$$$ > $@; \
+	rm -f $@.$$$$
+
+-include $(DEPS)
+
+.PHONY: clean
