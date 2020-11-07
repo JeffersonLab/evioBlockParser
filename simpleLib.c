@@ -32,6 +32,8 @@ typedef void (*VOIDFUNCPTR) ();
 
 /* Global Variables */
 simpleDebug        simpleDebugMask=0;
+int simpleCodaVersion=3;
+
 
 /* data address provided by user */
 unsigned long dataAddr = 0;
@@ -95,6 +97,17 @@ void
 simpleConfigSetDebug(int dbMask)
 {
   simpleDebugMask = dbMask;
+}
+
+void
+simpleConfigSetCodaVersion(int version)
+{
+  if((version != 2) && (version !=3))
+    {
+      printf("%s: ERROR: Invalid Version (%d)\n",
+	     __func__, version);
+    }
+  simpleCodaVersion = version;
 }
 
 /**
@@ -229,89 +242,133 @@ simpleScanCodaEvent(volatile unsigned int *data)
   /* Next word should be the CODA Event header */
   bh.raw = data[iword++];
 
-  if(bh.bf.type == EVIO_BANK)
+  if(simpleCodaVersion == 2)
     {
-      /* Hopefully this is the start of the trigger bank */
-      trigBank.length = data[iword++];
-      trigBank.header.raw = data[iword++];
-      trigBank.index = iword;
-
-      if(trigBank.header.bf.type == EVIO_SEGMENT)
+      if(bh.bf.num == 0xcc) /* CODA2: This indicates a physics event */
 	{
 	  if(simpleDebugMask & SIMPLE_SHOW_BANK_FOUND)
 	    {
-	      printf("[%6d  0x%08x] TRGB 0x%4x: Length = %d, nrocs = %d\n",
-		     trigBank.index - 1, trigBank.header.raw,
-		     trigBank.header.bf.type,
-		     trigBank.length,
-		     trigBank.header.bf.num);
+	      printf("[%6d  0x%08x] PHYB 0x%4x: Length = %d, type = %d\n",
+		     iword - 1, bh.raw,
+		     bh.bf.tag,
+		     nwords,
+		     bh.bf.tag);
+	    }
 
+	  /* This ought to be the event ID bank */
+	  bankHeader_t eventIDbank;
+	  int eventIDLength = data[iword++];
+	  eventIDbank.raw = data[iword++];
+
+	  if(eventIDbank.bf.tag == 0xC000)
+	    {
+	      /* I dont care much about it.  Just that it's there */
+	      if(simpleDebugMask & SIMPLE_SHOW_BANK_FOUND)
+		{
+		  printf("[%6d  0x%08x] EVID 0x%4x: Length = %d\n",
+			 iword - 1, eventIDbank.raw,
+			 eventIDbank.bf.tag,
+			 eventIDLength);
+		}
+	      /* Jump to next bank */
+	      iword += eventIDLength - 1;
+	    }
+
+	}
+      else
+	{
+	  printf("%s: ERROR: 0x%08x Unexpected Bank num 0x%x (%d)\n",
+		 __func__, bh.raw, bh.bf.num, bh.bf.num);
+	  return ERROR;
+	}
+    }
+  else
+    { /* CODA Version 3 */
+
+      if(bh.bf.type == EVIO_BANK)
+	{
+	  /* Hopefully this is the start of the trigger bank */
+	  trigBank.length = data[iword++];
+	  trigBank.header.raw = data[iword++];
+	  trigBank.index = iword;
+
+	  if(trigBank.header.bf.type == EVIO_SEGMENT)
+	    {
+	      if(simpleDebugMask & SIMPLE_SHOW_BANK_FOUND)
+		{
+		  printf("[%6d  0x%08x] TRGB 0x%4x: Length = %d, nrocs = %d\n",
+			 trigBank.index - 1, trigBank.header.raw,
+			 trigBank.header.bf.type,
+			 trigBank.length,
+			 trigBank.header.bf.num);
+
+		}
+	    }
+	  else
+	    {
+	      printf("%s: ERROR: 0x%08x Unexpected bank type 0x%x (%d)\n",
+		     __func__, trigBank.header.raw,
+		     trigBank.header.bf.type,
+		     trigBank.header.bf.type);
+
+	      return ERROR;
+	    }
+
+	  /* init number of rocs */
+	  trigBank.nrocs = 0;
+	  /* Index each trigger segment */
+	  while(iword < (trigBank.index + trigBank.length - 1))
+	    {
+	      segmentHeader_t sh;
+	      sh.raw = data[iword++];
+
+	      if(simpleDebugMask & SIMPLE_SHOW_SEGMENT_FOUND)
+		{
+		  printf("[%6d  0x%08x] SEGM %2d: type = 0x%x, length = %d\n",
+			 iword - 1, sh.raw,
+			 sh.bf.tag,
+			 sh.bf.type,
+			 sh.bf.num);
+		}
+
+	      switch(sh.bf.type)
+		{
+		case EVIO_ULONG64:	  /* Event number ( + timestamp) segment */
+		  {
+		    trigBank.segTime.index = iword;
+		    trigBank.segTime.header.raw = sh.raw;
+		    break;
+		  }
+		case EVIO_USHORT16:	  /* Event type segment */
+		  {
+		    trigBank.segEvType.index = iword;
+		    trigBank.segEvType.header.raw = sh.raw;
+		    break;
+		  }
+		case EVIO_UINT32:	  /* ROC segment */
+		  {
+		    trigBank.segRoc[sh.bf.tag].index = iword;
+		    trigBank.segRoc[sh.bf.tag].header.raw = sh.raw;
+		    trigBank.nrocs++;
+		    break;
+		  }
+
+		default:
+		  printf("%s: ERROR: [0x%08x] Unexpected Segment tag 0x%x (%d) in trigger bank\n",
+			 __func__, sh.raw, sh.bf.tag, sh.bf.tag);
+		  return ERROR;
+		}
+
+	      /* Move past this segment */
+	      iword += sh.bf.num;
 	    }
 	}
       else
 	{
-	  printf("%s: ERROR: 0x%08x Unexpected bank type 0x%x (%d)\n",
-		 __func__, trigBank.header.raw,
-		 trigBank.header.bf.type,
-		 trigBank.header.bf.type);
-
+	  printf("%s: ERROR: 0x%08x Unexpected Bank type 0x%x (%d)\n",
+		 __func__, bh.raw, bh.bf.type, bh.bf.type);
 	  return ERROR;
 	}
-
-      /* init number of rocs */
-      trigBank.nrocs = 0;
-      /* Index each trigger segment */
-      while(iword < (trigBank.index + trigBank.length - 1))
-	{
-	  segmentHeader_t sh;
-	  sh.raw = data[iword++];
-
-	  if(simpleDebugMask & SIMPLE_SHOW_SEGMENT_FOUND)
-	    {
-	      printf("[%6d  0x%08x] SEGM %2d: type = 0x%x, length = %d\n",
-		     iword - 1, sh.raw,
-		     sh.bf.tag,
-		     sh.bf.type,
-		     sh.bf.num);
-	    }
-
-	  switch(sh.bf.type)
-	    {
-	    case EVIO_ULONG64:	  /* Event number ( + timestamp) segment */
-	      {
-		trigBank.segTime.index = iword;
-		trigBank.segTime.header.raw = sh.raw;
-		break;
-	      }
-	    case EVIO_USHORT16:	  /* Event type segment */
-	      {
-		trigBank.segEvType.index = iword;
-		trigBank.segEvType.header.raw = sh.raw;
-		break;
-	      }
-	    case EVIO_UINT32:	  /* ROC segment */
-	      {
-		trigBank.segRoc[sh.bf.tag].index = iword;
-		trigBank.segRoc[sh.bf.tag].header.raw = sh.raw;
-		trigBank.nrocs++;
-		break;
-	      }
-
-	    default:
-	      printf("%s: ERROR: [0x%08x] Unexpected Segment tag 0x%x (%d) in trigger bank\n",
-		     __func__, sh.raw, sh.bf.tag, sh.bf.tag);
-	      return ERROR;
-	    }
-
-	  /* Move past this segment */
-	  iword += sh.bf.num;
-	}
-    }
-  else
-    {
-      printf("%s: ERROR: 0x%08x Unexpected Bank type 0x%x (%d)\n",
-	     __func__, bh.raw, bh.bf.type, bh.bf.type);
-      return ERROR;
     }
 
   /* ROC Banks start here */
@@ -868,6 +925,9 @@ simpleGetTriggerBankTimeSegment(unsigned long long **buffer)
   int len = 0;
   unsigned long addr = (unsigned long)((unsigned int *)dataAddr + trigBank.segTime.index);
 
+  if(simpleCodaVersion == 2)
+    return 0;
+
   *buffer = (unsigned long long int *)addr;
   len = trigBank.segTime.header.bf.num >> 1;
 
@@ -888,6 +948,9 @@ simpleGetTriggerBankTypeSegment(unsigned short **buffer)
 {
   int len = 0;
   unsigned long addr = (unsigned long)((unsigned int *)dataAddr + trigBank.segEvType.index);
+
+  if(simpleCodaVersion == 2)
+    return 0;
 
   *buffer = (unsigned short *)addr;
   len = trigBank.segEvType.header.bf.num << 1;
@@ -910,6 +973,9 @@ simpleGetTriggerBankRocSegment(int rocID, unsigned int **buffer)
 {
   int len = 0;
   unsigned long addr = 0;
+
+  if(simpleCodaVersion == 2)
+    return 0;
 
   if(trigBank.segRoc[rocID].header.bf.tag != rocID)
     {

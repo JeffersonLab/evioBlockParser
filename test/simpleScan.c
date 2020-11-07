@@ -12,7 +12,7 @@ main(int argc, char **argv)
   int verbose = 1;
   int handle;
   uint32_t *buf, bufLen, nevents = 0, status = 0;
-  char filename[128] = "/home/moffit/tmp/vtpCompton_854.dat.0";
+  char filename[128] = "/daqfs/scratch/moffit/hallc/lappd_692.dat";
 
   simpleConfigSetDebug(0xffff & ~SIMPLE_SHOW_OTHER);
   /* Open file  */

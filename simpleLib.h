@@ -31,7 +31,6 @@
 
 #define BANK_ID_MASK   0xFFFF0000
 
-
 #ifndef ERROR
 #define ERROR -1
 #endif
@@ -299,7 +298,7 @@ extern "C" {
 int  simpleInit();
 
 void simpleConfigSetDebug(int dbMask);
-
+void simpleConfigSetCodaVersion(int version);
 int  simpleConfigBank(int rocID, int tag, int num,
 		 int endian, int isBlocked, void *firstPassRoutine);
 
