@@ -324,7 +324,7 @@ simpleScanCodaEvent(volatile unsigned int *data)
       rocBankLength = data[iword++] - 1;
       rocBankHeader.raw = data[iword++];
 
-      rocID = rocBankHeader.bf.tag;
+      rocID = rocBankHeader.bf.tag & 0x0FFF;
 
       if(rocID > SIMPLE_MAX_ROCS)
 	{
@@ -469,7 +469,7 @@ simpleScanBank(volatile unsigned int *data, int rocID, int bankNumber)
   blkCounter = 0;
 
   /* Check if this rocID and bankNumber combo were found in simpleScanCodaEvent */
-  if( (rocBank[rocID].header.bf.tag != rocID) ||
+  if( ((rocBank[rocID].header.bf.tag & 0x0FFF) != rocID) ||
       (rocBank[rocID].dataBank[bankNumber].header.bf.tag != bankNumber) )
     {
       if(simpleDebugMask & SIMPLE_SHOW_BANK_NOT_FOUND)
