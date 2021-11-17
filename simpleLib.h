@@ -65,6 +65,8 @@
 
 #define FILLER_SLOT_MASK          0x07C00000
 
+
+
 typedef struct
 {
   unsigned int undef:27;
@@ -125,6 +127,22 @@ typedef union
   event_header bf;
 } event_header_t;
 
+/* 12: SCALER HEADER */
+typedef struct
+{
+  unsigned int scaler_words:6;
+  unsigned int _blank:16;
+  unsigned int slot_number:5;
+  unsigned int data_type_tag:4;
+  unsigned int data_type_defining:1;
+} scaler_header;
+
+typedef union
+{
+  unsigned int raw;
+  scaler_header bf;
+} scaler_header_t;
+
 
 /* Bank type definitions - These are in evioDictEntry.hxx */
 enum DataType {
@@ -154,6 +172,7 @@ typedef enum jlabDataTypes
     BLOCK_TRAILER  = 1,
     EVENT_HEADER   = 2,
     TRIGGER_TIME   = 3,
+    SCALER_HEADER  = 12,
     DATA_NOT_VALID = 14,
     FILLER         = 15
   } DataTypes;
@@ -194,7 +213,8 @@ typedef enum simpleDebugType
     SIMPLE_SHOW_UNBLOCK          = (1<<8),
     SIMPLE_SHOW_IGNORED_BANKS    = (1<<9),
     SIMPLE_SHOW_SEGMENT_FOUND    = (1<<10),
-    SIMPLE_SHOW_BANK_NOT_FOUND   = (1<<11)
+    SIMPLE_SHOW_BANK_NOT_FOUND   = (1<<11),
+    SIMPLE_SHOW_SCALER_HEADER    = (1<<12)
   } simpleDebug;
 
 typedef struct

@@ -465,6 +465,7 @@ simpleScanBank(volatile unsigned int *data, int rocID, int bankNumber)
   block_header_t bheader;
   block_trailer_t btrailer;
   event_header_t eheader;
+  scaler_header_t sheader;
 
   blkCounter = 0;
 
@@ -625,6 +626,22 @@ simpleScanBank(volatile unsigned int *data, int rocID, int bankNumber)
 		bankData[rocID][bankNumber].evtIndex[slotNumber][current_event] = iword;
 
 		break;
+	      }
+
+	    case SCALER_HEADER: /* 12: SCALER_HEADER */
+	      {
+		sheader.raw = jdata.raw;
+
+		if(simpleDebugMask & SIMPLE_SHOW_SCALER_HEADER)
+		  {
+		    printf("[%6d  0x%08x] "
+			   "SCALER HEADER: scaler_words = %d\n",
+			   iword,
+			   jdata.raw, sheader.bf.scaler_words);
+
+		  }
+
+		iword += sheader.bf.scaler_words;
 	      }
 
 	    default:
