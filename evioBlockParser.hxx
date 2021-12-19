@@ -281,6 +281,13 @@ public:
   //
   int32_t GetU32(uint8_t rocID, uint16_t bankID, uint32_t **payload);
 
+  bool CheckTriggerBank(uint8_t rocID);
+  int32_t GetTriggerBankEvTag(uint16_t *evtag);
+  int32_t GetTriggerBankTimestamp(uint64_t **payload);
+  int32_t GetTriggerBankEvType(uint16_t **payload);
+  int32_t GetTriggerBankRocData(uint8_t rocID, uint32_t **payload);
+
+
 private:
   // Main storage container
   map < uint8_t, Roc_t > rocMap;

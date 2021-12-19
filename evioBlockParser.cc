@@ -134,13 +134,9 @@ evioBlockParser::containerNodeHandler(int bankLength, int constainerType,
 	    {
 	      EBP_ERROR("Unknown Event Tag 0x%x\n", tag);
 	    }
-<<<<<<< variant A
-      	}
->>>>>>> variant B
 
 
 	}
-======= end
 
       break;
     case EVIO_SEGMENT:
@@ -207,13 +203,12 @@ evioBlockParser::leafNodeHandler(int bankLength, int containerType,
   if((parent.tag >= TRIGGER_BANK.min) && (parent.tag <= TRIGGER_BANK.max))
     {
 
-    case EVIO_UINT32:
-      i = (uint32_t *) data;
-      EBP_DEBUG(SHOW_NODE_FOUND,"  Data:   0x%08x  0x%08x\n", i[0], i[1]);
-
-      if((parent.tag >= TRIGGER_BANK.min) &&
-	 (parent.tag <= TRIGGER_BANK.max))
+      switch (contentType)
 	{
+	case EVIO_UINT32:
+	  i = (uint32_t *) data;
+	  EBP_DEBUG(SHOW_NODE_FOUND,"  Data:   0x%08x  0x%08x\n", i[0], i[1]);
+
 	  ////////////////////////////////////////////////////////////
 	  // ROC DATA SEGMENT (of TRIGGER BANK)
 	  ////////////////////////////////////////////////////////////
@@ -224,40 +219,12 @@ evioBlockParser::leafNodeHandler(int bankLength, int containerType,
 
 	  triggerBank.roc[tag].length = dataLength;
 	  triggerBank.roc[tag].payload = (uint32_t *) data;
-	}
-      else if((depth == 0) &&
-	      (tag >= CONTROL_EVENT.min) &&
-	      (tag <= CONTROL_EVENT.max))
-	{
-	  ////////////////////////////////////////////////////////////
-	  // CODA CONTROL EVENT
-	  ////////////////////////////////////////////////////////////
-	  // Parent is a CODA Control Event
-	  EBP_DEBUG(SHOW_BANK_FOUND,
-		    "   **** Identified CODA Control Event 0x%x ****\n",
-		    tag);
-	}
-      else
-	{
-	  ////////////////////////////////////////////////////////////
-	  // ROC DATA BANK (potentially module data)
-	  ////////////////////////////////////////////////////////////
-	  // Potentially a Bank with block data to index
-	  EBP_DEBUG(SHOW_BANK_FOUND,
-		    "   **** Identified ROC:%d Bank tag: 0x%x ****\n",
-		    parent.tag, tag);
+	  break;
 
-	  // Pass it on to the Event Indexer
-	}
-      break;
+	case EVIO_USHORT16:
+	  s = (uint16_t *) data;
+	  EBP_DEBUG(SHOW_NODE_FOUND,"  Data:   0x%04x  0x%04x\n", s[0], s[1]);
 
-    case EVIO_USHORT16:
-      s = (uint16_t *) data;
-      EBP_DEBUG(SHOW_NODE_FOUND,"  Data:   0x%04x  0x%04x\n", s[0], s[1]);
-
-      if((parent.tag >= TRIGGER_BANK.min) &&
-	 (parent.tag <= TRIGGER_BANK.max))
-	{
 	  ////////////////////////////////////////////////////////////
 	  // EVENT TYPE SEGMENT (of TRIGGER BANK)
 	  ////////////////////////////////////////////////////////////
@@ -266,24 +233,12 @@ evioBlockParser::leafNodeHandler(int bankLength, int containerType,
 	  triggerBank.evtype.length = dataLength;
 	  triggerBank.evtype.payload = (uint16_t *) data;
 	  triggerBank.evtype.ebID = tag;
-	}
-      else
-	{
-	  EBP_ERROR("Unknown uint16_t bank.  tag: 0x%x  num: 0x%x\n",
-		    tag, num);
-	}
-      break;
+	  break;
 
-    case EVIO_ULONG64:
-      ll = (uint64_t *) data;
-      EBP_DEBUG(SHOW_NODE_FOUND,"  Data:   0x%016lx  0x%016lx \n", ll[0], ll[1]);
+	case EVIO_ULONG64:
+	  ll = (uint64_t *) data;
+	  EBP_DEBUG(SHOW_NODE_FOUND,"  Data:   0x%016lx  0x%016lx \n", ll[0], ll[1]);
 
-      if((parent.tag >= TRIGGER_BANK.min) &&
-	 (parent.tag <= TRIGGER_BANK.max))
-	{
-	  ////////////////////////////////////////////////////////////
-	  // TIMESTAMP SEGMENT (of TRIGGER BANK)
-	  ////////////////////////////////////////////////////////////
 	  EBP_DEBUG(SHOW_SEGMENT_FOUND, "   **** Identified Timestamp segment ****\n");
 	  // Parent is the Trigger Bank.  This should be the timestamp segment
 	  triggerBank.timestamp.length = dataLength;
@@ -354,12 +309,6 @@ evioBlockParser::leafNodeHandler(int bankLength, int containerType,
 		 parent.tag);
 	  printf("\n%-12s\n", (char *)data);
 	}
-      else
-	{
-	  EBP_ERROR("Unknown uint64_t bank.  tag: 0x%x  num: 0x%x\n",
-		    tag, num);
-	}
-      break;
 
     }
 
@@ -390,7 +339,7 @@ bool evioBlockParser::Check(uint8_t rocID, uint16_t bankID)
 }
 
 bool
-  evioBlockParser::Check(uint8_t rocID, uint16_t bankID, uint8_t slotnumber)
+evioBlockParser::Check(uint8_t rocID, uint16_t bankID, uint8_t slotnumber)
 {
   if(Check(rocID, bankID))
     {
@@ -403,8 +352,8 @@ bool
 }
 
 bool
-  evioBlockParser::Check(uint8_t rocID, uint16_t bankID, uint8_t slotnumber,
-			 uint8_t evt)
+evioBlockParser::Check(uint8_t rocID, uint16_t bankID, uint8_t slotnumber,
+		       uint8_t evt)
 {
   if(Check(rocID, bankID, slotnumber))
     {
@@ -418,6 +367,10 @@ bool
   return false;
 }
 
+//
+// GetU32 - Get a pointer to the U32 data array for rocID, with bank = bankID
+//
+
 int32_t
 evioBlockParser::GetU32(uint8_t rocID, uint16_t bankID, uint32_t **payload)
 {
@@ -426,6 +379,62 @@ evioBlockParser::GetU32(uint8_t rocID, uint16_t bankID, uint32_t **payload)
     {
       *payload = (uint32_t *)rocMap[rocID].bankMap[bankID].payload;
       rval = rocMap[rocID].bankMap[bankID].length;
+    }
+
+  return rval;
+}
+
+bool
+evioBlockParser::CheckTriggerBank(uint8_t rocID)
+{
+  auto
+    roc = triggerBank.roc.find(rocID);
+  if(roc != triggerBank.roc.end())
+    return true;
+
+  return false;
+}
+
+
+int32_t
+evioBlockParser::GetTriggerBankEvTag(uint16_t *evtag)
+{
+  int32_t rval = -1;
+  *evtag = triggerBank.tag.raw;
+  rval = 1;
+
+  return rval;
+}
+
+int32_t
+evioBlockParser::GetTriggerBankTimestamp(uint64_t **payload)
+{
+  int32_t rval = -1;
+  *payload = (uint64_t *)triggerBank.timestamp.payload;
+  rval = triggerBank.timestamp.length;
+
+  return rval;
+}
+
+int32_t
+evioBlockParser::GetTriggerBankEvType(uint16_t **payload)
+{
+  int32_t rval = -1;
+  *payload = (uint16_t *)triggerBank.evtype.payload;
+  rval = triggerBank.evtype.length;
+
+  return rval;
+}
+
+int32_t
+evioBlockParser::GetTriggerBankRocData(uint8_t rocID, uint32_t **payload)
+{
+  int32_t rval = -1;
+
+  if(CheckTriggerBank(rocID))
+    {
+      *payload = (uint32_t *)triggerBank.roc[rocID].payload;
+      rval = triggerBank.roc[rocID].length;
     }
 
   return rval;
