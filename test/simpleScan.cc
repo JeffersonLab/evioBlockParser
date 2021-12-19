@@ -51,6 +51,29 @@ main(int argc, char **argv)
 
 	  p.Parse(buf);
 
+	  uint16_t evtag; int32_t evtag_len;
+	  evtag_len = p.GetTriggerBankEvTag(&evtag);
+
+	  uint64_t *evtimestamp; int32_t evtimestamp_len;
+	  evtimestamp_len = p.GetTriggerBankTimestamp(&evtimestamp);
+
+	  printf("evtag data (%d) = 0x%04x\n", evtag_len, evtag);
+
+	  printf("evtimestamp data (%d) = \n", evtimestamp_len);
+	  for(int32_t idt = 0; idt < evtimestamp_len; idt++)
+	    {
+	      printf(" 0x%016lx \n", evtimestamp[idt]);
+	    }
+	  printf("\n");
+
+	  uint32_t *data;
+	  int len = 0;
+	  len = p.GetU32(6, 4, &data);
+	  printf(" len = %d \n", len);
+	  for(int i=0; i < len; i++)
+	    printf("%2d: 0x%08x\n",
+		   i, data[i]);
+
 	  if((nevents >= maxev) && (maxev != 0))
 	    break;
 

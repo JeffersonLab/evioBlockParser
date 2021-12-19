@@ -439,3 +439,17 @@ evioBlockParser::GetTriggerBankRocData(uint8_t rocID, uint32_t **payload)
 
   return rval;
 }
+
+vector<uint8_t>
+evioBlockParser::GetTriggerBankRocSegmentID()
+{
+  vector<uint8_t> retRocs;
+
+  for(std::map<uint8_t,trigger_segment32_t>::iterator it = triggerBank.roc.begin();
+      it != triggerBank.roc.end(); ++it)
+    {
+      retRocs.push_back(it->first);
+    }
+
+  return retRocs;
+}

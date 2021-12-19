@@ -286,6 +286,7 @@ public:
   int32_t GetTriggerBankTimestamp(uint64_t **payload);
   int32_t GetTriggerBankEvType(uint16_t **payload);
   int32_t GetTriggerBankRocData(uint8_t rocID, uint32_t **payload);
+  vector<uint8_t> GetTriggerBankRocSegmentID();
 
 
 private:
