@@ -77,20 +77,33 @@ evioBlockParser::containerNodeHandler(int bankLength, int constainerType,
   switch (contentType)
     {
     case EVIO_BANK:
-
+      ////////////////////////////////////////////////////////////
+      // BANK OF BANKS
+      ////////////////////////////////////////////////////////////
       if(depth > 0)
 	{
 	  if ((parentMap[depth-1].tag >= PHYSICS_EVENT.min) &&
 	      (parentMap[depth-1].tag <= PHYSICS_EVENT.max))
 	    {
+	      ////////////////////////////////////////////////////////////
+	      // ROC BANK
+	      ////////////////////////////////////////////////////////////
 	      // parent node is a CODA Physics Event Bank.  This ought to be a ROC Bank
-	      EBP_DEBUG(SHOW_BANK_FOUND, "   **** Identified ROC Bank ****\n");
+	      EBP_DEBUG(SHOW_BANK_FOUND,
+			"   **** Identified ROC:%d Bank ****\n",
+			tag);
 	      rocMap[tag].length = payloadLength;
 	      rocMap[tag].payload = (uint32_t *)bankPointer;
 	    }
 	  else
 	    {
-	      // parent node is a User Bank (FIXME: assumes parent is ROC Bank)
+	      ////////////////////////////////////////////////////////////
+	      // BANK of BANKS within the ROC Bank
+	      ////////////////////////////////////////////////////////////
+	      // Its undefined, at the moment, how to handle these.
+	      EBP_DEBUG(SHOW_BANK_FOUND,
+			"   ???? Identified ROC:%d Bank of Banks tag: 0x%x ????\n",
+			parent.tag, tag);
 	      rocMap[parent.tag].bankMap[tag].length = payloadLength;
 	      rocMap[parent.tag].bankMap[tag].payload = (uint32_t *)payload;
 	    }
@@ -101,28 +114,42 @@ evioBlockParser::containerNodeHandler(int bankLength, int constainerType,
       	  if ((tag >= PHYSICS_EVENT.min) &&
       	      (tag <= PHYSICS_EVENT.max))
       	    {
-      	      EBP_DEBUG(SHOW_BANK_FOUND, "   **** Identified CODA Physics Event Bank ****\n");
+	      ////////////////////////////////////////////////////////////
+	      // CODA PHYSICS EVENT BANK
+	      ////////////////////////////////////////////////////////////
+      	      EBP_DEBUG(SHOW_BANK_FOUND,
+			"   **** Identified CODA Physics Event Bank (blockLevel = %d) ****\n",
+			num);
 	      blockLevel = num;
-      	      EBP_DEBUG(SHOW_BANK_FOUND, "   blockLevel = 0x%x (%d)\n",
-			blockLevel, blockLevel);
-      	    } else if((tag >= CONTROL_EVENT.min) &&
-		      (tag <= CONTROL_EVENT.max))
+      	    }
+	  else if((tag >= CONTROL_EVENT.min) &&
+		  (tag <= CONTROL_EVENT.max))
       	    {
+	      ////////////////////////////////////////////////////////////
+	      // CODA CONTROL EVENT BANK
+	      ////////////////////////////////////////////////////////////
       	      EBP_DEBUG(SHOW_BANK_FOUND, "   **** Identified CODA Control Event Bank ****\n");
-      	    } else
+      	    }
+	  else
 	    {
 	      EBP_ERROR("Unknown Event Tag 0x%x\n", tag);
 	    }
-
-
       	}
 
       break;
     case EVIO_SEGMENT:
+      ////////////////////////////////////////////////////////////
+      // BANK OF SEGMENTS
+      ////////////////////////////////////////////////////////////
       if ((parentMap[depth-1].tag >= PHYSICS_EVENT.min) &&
 	  (parentMap[depth-1].tag <= PHYSICS_EVENT.max))
 	{
-	  EBP_DEBUG(SHOW_BANK_FOUND, "   **** Identified Trigger Bank ****\n");
+	  ////////////////////////////////////////////////////////////
+	  // TRIGGER BANK
+	  ////////////////////////////////////////////////////////////
+	  EBP_DEBUG(SHOW_BANK_FOUND,
+		    "   **** Identified Trigger Bank (nrocs = %d) ****\n",
+		    num);
 	  // parent node is a CODA Physics Event Bank.  This ought to be a Trigger Bank
 	  triggerBank.tag.raw = tag;
 	  triggerBank.nrocs = num;
@@ -176,44 +203,93 @@ evioBlockParser::leafNodeHandler(int bankLength, int containerType, int contentT
     {
 
     case EVIO_UINT32:
+      i = (uint32_t *) data;
+      EBP_DEBUG(SHOW_NODE_FOUND,"  Data:   0x%08x  0x%08x\n", i[0], i[1]);
+
       if((parent.tag >= TRIGGER_BANK.min) &&
 	 (parent.tag <= TRIGGER_BANK.max))
 	{
+	  ////////////////////////////////////////////////////////////
+	  // ROC DATA SEGMENT (of TRIGGER BANK)
+	  ////////////////////////////////////////////////////////////
 	  // Parent is the Trigger Bank.  This should be a ROC data segment
-	  EBP_DEBUG(SHOW_SEGMENT_FOUND, "   **** Identified ROC data segment ****\n");
+	  EBP_DEBUG(SHOW_SEGMENT_FOUND,
+		    "   **** Identified ROC %d data segment ****\n",
+		    tag);
 
-
+	  triggerBank.roc[tag].length = dataLength;
+	  triggerBank.roc[tag].payload = (uint32_t *) data;
 	}
-      i = (uint32_t *) data;
-      EBP_DEBUG(SHOW_NODE_FOUND,"  Data:   0x%08x  0x%08x\n", i[0], i[1]);
+      else if((depth == 0) &&
+	      (tag >= CONTROL_EVENT.min) &&
+	      (tag <= CONTROL_EVENT.max))
+	{
+	  ////////////////////////////////////////////////////////////
+	  // CODA CONTROL EVENT
+	  ////////////////////////////////////////////////////////////
+	  // Parent is a CODA Control Event
+	  EBP_DEBUG(SHOW_BANK_FOUND,
+		    "   **** Identified CODA Control Event 0x%x ****\n",
+		    tag);
+	}
+      else
+	{
+	  ////////////////////////////////////////////////////////////
+	  // ROC DATA BANK (potentially module data)
+	  ////////////////////////////////////////////////////////////
+	  // Potentially a Bank with block data to index
+	  EBP_DEBUG(SHOW_BANK_FOUND,
+		    "   **** Identified ROC:%d Bank tag: 0x%x ****\n",
+		    parent.tag, tag);
+
+	  // Pass it on to the Event Indexer
+	}
       break;
 
     case EVIO_USHORT16:
+      s = (uint16_t *) data;
+      EBP_DEBUG(SHOW_NODE_FOUND,"  Data:   0x%04x  0x%04x\n", s[0], s[1]);
+
       if((parent.tag >= TRIGGER_BANK.min) &&
 	 (parent.tag <= TRIGGER_BANK.max))
 	{
+	  ////////////////////////////////////////////////////////////
+	  // EVENT TYPE SEGMENT (of TRIGGER BANK)
+	  ////////////////////////////////////////////////////////////
 	  // Parent is the Trigger Bank.  This should be the event type segment
 	  EBP_DEBUG(SHOW_SEGMENT_FOUND, "   **** Identified Event Type segment ****\n");
 	  triggerBank.evtype.length = dataLength;
 	  triggerBank.evtype.payload = (uint16_t *) data;
 	  triggerBank.evtype.ebID = tag;
 	}
-      s = (uint16_t *) data;
-      EBP_DEBUG(SHOW_NODE_FOUND,"  Data:   0x%04x  0x%04x\n", s[0], s[1]);
+      else
+	{
+	  EBP_ERROR("Unknown uint16_t bank.  tag: 0x%x  num: 0x%x\n",
+		    tag, num);
+	}
       break;
 
     case EVIO_ULONG64:
+      ll = (uint64_t *) data;
+      EBP_DEBUG(SHOW_NODE_FOUND,"  Data:   0x%016lx  0x%016lx \n", ll[0], ll[1]);
+
       if((parent.tag >= TRIGGER_BANK.min) &&
 	 (parent.tag <= TRIGGER_BANK.max))
 	{
+	  ////////////////////////////////////////////////////////////
+	  // TIMESTAMP SEGMENT (of TRIGGER BANK)
+	  ////////////////////////////////////////////////////////////
 	  EBP_DEBUG(SHOW_SEGMENT_FOUND, "   **** Identified Timestamp segment ****\n");
 	  // Parent is the Trigger Bank.  This should be the timestamp segment
 	  triggerBank.timestamp.length = dataLength;
 	  triggerBank.timestamp.payload = (uint64_t *) data;
 	  triggerBank.timestamp.ebID = tag;
 	}
-      ll = (uint64_t *) data;
-      EBP_DEBUG(SHOW_NODE_FOUND,"  Data:   0x%016lx  0x%016lx \n", ll[0], ll[1]);
+      else
+	{
+	  EBP_ERROR("Unknown uint64_t bank.  tag: 0x%x  num: 0x%x\n",
+		    tag, num);
+	}
       break;
 
     case EVIO_INT32:

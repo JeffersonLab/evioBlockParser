@@ -162,7 +162,6 @@ class evioBlockParser:public evioStreamParserHandler
 
   struct trigger_segment32_t
   {
-    uint8_t ebID;
     uint32_t length;
     uint32_t *payload;
   };
