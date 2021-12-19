@@ -266,6 +266,20 @@ public:
       SHOW_BANK_NOT_FOUND   = (1<<12)
     };
 
+  //
+  // Routines for checking if the evio buffer was found to contain the sought after
+  //  rocIDs, bankIDs, slotnumbers, and events
+  //
+  bool Check(uint8_t rocID);
+  bool Check(uint8_t rocID, uint16_t bankID);
+  bool Check(uint8_t rocID, uint16_t bankID, uint8_t slotnumber);
+  bool Check(uint8_t rocID, uint16_t bankID, uint8_t slotnumber, uint8_t evt);
+
+  //
+  // Data access routines
+  //
+  //
+  int32_t GetU32(uint8_t rocID, uint16_t bankID, uint32_t **payload);
 
 private:
   // Main storage container
@@ -286,15 +300,6 @@ private:
 			uint16_t tag, uint8_t num, int depth,
 			const uint32_t * bankPointer, int dataLength,
 			const void *data, void *userArg);
-
-  //
-  // Routines for checking if the evio buffer was found to contain the sought after
-  //  rocIDs, bankIDs, slotnumbers, and events
-  //
-  bool Check(uint8_t rocID);
-  bool Check(uint8_t rocID, uint16_t bankID);
-  bool Check(uint8_t rocID, uint16_t bankID, uint8_t slotnumber);
-  bool Check(uint8_t rocID, uint16_t bankID, uint8_t slotnumber, uint8_t evt);
 
   //
   uint32_t debugMask;
