@@ -25,6 +25,14 @@
 #include <stdint.h>
 #include "evioBlockParser.hxx"
 
+/**
+ * Parse the buffer at provided address
+ *
+ * Currently assumes the buffer is that which is provided by
+ *   evioFileChannel::readAlloc(...)
+ */
+
+
 void
 evioBlockParser::Parse(const uint32_t * buf)
 {
@@ -367,9 +375,50 @@ evioBlockParser::Check(uint8_t rocID, uint16_t bankID, uint8_t slotnumber,
   return false;
 }
 
-//
-// GetU32 - Get a pointer to the U32 data array for rocID, with bank = bankID
-//
+/**
+ * Get a list of ROCIDs in the parsed buffer
+ */
+
+vector<uint8_t>
+evioBlockParser::GetRocList()
+{
+  vector<uint8_t> retRocs;
+
+  for(std::map<uint8_t,Roc_t>::iterator it = rocMap.begin();
+      it != rocMap.end(); ++it)
+    {
+      retRocs.push_back(it->first);
+    }
+
+  return retRocs;
+
+}
+
+/**
+ * Get a list of Banks for given rocID, in the parsed buffer
+ */
+
+vector<uint16_t>
+evioBlockParser::GetBankList(uint8_t rocID)
+{
+  vector<uint16_t> retBanks;
+
+  if(Check(rocID))
+    {
+      for(std::map<uint16_t,Bank_t>::iterator it = rocMap[rocID].bankMap.begin();
+	  it != rocMap[rocID].bankMap.end(); ++it)
+	{
+	  retBanks.push_back(it->first);
+	}
+    }
+
+  return retBanks;
+
+}
+
+/**
+ * GetU32 - Get a pointer to the U32 data array for rocID, with bank = bankID
+ */
 
 int32_t
 evioBlockParser::GetU32(uint8_t rocID, uint16_t bankID, uint32_t **payload)
@@ -378,6 +427,23 @@ evioBlockParser::GetU32(uint8_t rocID, uint16_t bankID, uint32_t **payload)
   if(Check(rocID, bankID))
     {
       *payload = (uint32_t *)rocMap[rocID].bankMap[bankID].payload;
+      rval = rocMap[rocID].bankMap[bankID].length;
+    }
+
+  return rval;
+}
+
+/**
+ * GetU16 - Get a pointer to the U16 data array for rocID, with bank = bankID
+ */
+
+int32_t
+evioBlockParser::GetU16(uint8_t rocID, uint16_t bankID, uint16_t **payload)
+{
+  int32_t rval = -1;
+  if(Check(rocID, bankID))
+    {
+      *payload = (uint16_t *)rocMap[rocID].bankMap[bankID].payload;
       rval = rocMap[rocID].bankMap[bankID].length;
     }
 

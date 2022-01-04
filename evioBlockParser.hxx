@@ -279,7 +279,11 @@ public:
   // Data access routines
   //
   //
+
+  vector<uint8_t> GetRocList();
+  vector<uint16_t> GetBankList(uint8_t rocID);
   int32_t GetU32(uint8_t rocID, uint16_t bankID, uint32_t **payload);
+  int32_t GetU16(uint8_t rocID, uint16_t bankID, uint16_t **payload);
 
   bool CheckTriggerBank(uint8_t rocID);
   int32_t GetTriggerBankEvTag(uint16_t *evtag);
