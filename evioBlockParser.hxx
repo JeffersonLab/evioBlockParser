@@ -285,6 +285,7 @@ public:
   int32_t GetU32(uint8_t rocID, uint16_t bankID, uint32_t **payload);
   int32_t GetU16(uint8_t rocID, uint16_t bankID, uint16_t **payload);
 
+  bool CheckTriggerBank();
   bool CheckTriggerBank(uint8_t rocID);
   int32_t GetTriggerBankEvTag(uint16_t *evtag);
   int32_t GetTriggerBankTimestamp(uint64_t **payload);
@@ -313,7 +314,7 @@ private:
 			const uint32_t * bankPointer, int dataLength,
 			const void *data, void *userArg);
 
-  //
+  void ClearTriggerBank();
   uint32_t debugMask;
 
 };

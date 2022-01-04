@@ -39,6 +39,7 @@ evioBlockParser::Parse(const uint32_t * buf)
   evioStreamParser p;
   // Array of parents where index is the node depth
   //  This'll help evioStreamParser keep track of where the node came from
+  ClearTriggerBank();
   Parent_t parentMap[5];
 
   p.parse(buf, *this, (void *) parentMap);
@@ -323,6 +324,15 @@ evioBlockParser::leafNodeHandler(int bankLength, int containerType,
   return ((void *) NULL);
 }
 
+void
+evioBlockParser::ClearTriggerBank()
+{
+  triggerBank.tag.raw = 0;
+  triggerBank.nrocs = 0;
+  triggerBank.roc.clear();
+}
+
+
 bool evioBlockParser::Check(uint8_t rocID)
 {
   auto
@@ -405,6 +415,7 @@ evioBlockParser::GetBankList(uint8_t rocID)
 
   if(Check(rocID))
     {
+      printf("rocID = %d\n", rocID);
       for(std::map<uint16_t,Bank_t>::iterator it = rocMap[rocID].bankMap.begin();
 	  it != rocMap[rocID].bankMap.end(); ++it)
 	{
@@ -451,6 +462,15 @@ evioBlockParser::GetU16(uint8_t rocID, uint16_t bankID, uint16_t **payload)
 }
 
 bool
+evioBlockParser::CheckTriggerBank()
+{
+  if(triggerBank.tag.raw == 0)
+    return false;
+
+  return true;
+}
+
+bool
 evioBlockParser::CheckTriggerBank(uint8_t rocID)
 {
   auto
@@ -466,8 +486,12 @@ int32_t
 evioBlockParser::GetTriggerBankEvTag(uint16_t *evtag)
 {
   int32_t rval = -1;
-  *evtag = triggerBank.tag.raw;
-  rval = 1;
+
+  if(CheckTriggerBank())
+    {
+      *evtag = triggerBank.tag.raw;
+      rval = 1;
+    }
 
   return rval;
 }
@@ -476,8 +500,12 @@ int32_t
 evioBlockParser::GetTriggerBankTimestamp(uint64_t **payload)
 {
   int32_t rval = -1;
-  *payload = (uint64_t *)triggerBank.timestamp.payload;
-  rval = triggerBank.timestamp.length;
+
+  if(CheckTriggerBank())
+    {
+      *payload = (uint64_t *)triggerBank.timestamp.payload;
+      rval = triggerBank.timestamp.length;
+    }
 
   return rval;
 }
@@ -486,8 +514,12 @@ int32_t
 evioBlockParser::GetTriggerBankEvType(uint16_t **payload)
 {
   int32_t rval = -1;
-  *payload = (uint16_t *)triggerBank.evtype.payload;
-  rval = triggerBank.evtype.length;
+
+  if(CheckTriggerBank())
+    {
+      *payload = (uint16_t *)triggerBank.evtype.payload;
+      rval = triggerBank.evtype.length;
+    }
 
   return rval;
 }

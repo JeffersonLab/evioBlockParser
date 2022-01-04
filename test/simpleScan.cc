@@ -44,8 +44,8 @@ main(int argc, char **argv)
 		 nevents, buf[0],
 		 (buf[1] & 0xffff0000) >> 16);
 
-	  // stream parse the buffer
-	  cout << endl << endl << "Stream parsing event:" << endl << endl;
+	  // evioBlockParser on the buffer
+	  cout << endl << endl << "evioBlockParser event:" << endl << endl;
 	  evioBlockParser p;
 	  p.SetDebugMask(0xffff &~ evioBlockParser::SHOW_NODE_FOUND);
 
@@ -53,6 +53,8 @@ main(int argc, char **argv)
 
 	  uint16_t evtag; int32_t evtag_len;
 	  evtag_len = p.GetTriggerBankEvTag(&evtag);
+	  if(evtag_len == -1)
+	    continue;
 
 	  uint64_t *evtimestamp; int32_t evtimestamp_len;
 	  evtimestamp_len = p.GetTriggerBankTimestamp(&evtimestamp);
@@ -66,13 +68,33 @@ main(int argc, char **argv)
 	    }
 	  printf("\n");
 
-	  uint32_t *data;
-	  int len = 0;
-	  len = p.GetU32(6, 4, &data);
-	  printf(" len = %d \n", len);
-	  for(int i=0; i < len; i++)
-	    printf("%2d: 0x%08x\n",
-		   i, data[i]);
+	  vector<uint8_t> roclist(32);
+	  vector<uint16_t> banklist(32);
+
+	  roclist = p.GetRocList();
+
+	  printf("roclist size = %d\n", roclist.size());
+	  for(int i=0; i < roclist.size(); i++)
+	    {
+	      printf("%4d: 0x%x\n", i, roclist[i]);
+
+	      banklist = p.GetBankList(roclist[i]);
+	      printf("\tbanklist size = %d\n", banklist.size());
+	      for(int j = 0; j < banklist.size(); j++)
+	      	{
+	      	  printf("\t%4d: 0x%x\n", j, banklist[j]);
+
+		  uint32_t *data;
+		  int len = 0;
+		  len = p.GetU32(roclist[i], banklist[j], &data);
+		  printf(" len = %d \n", len);
+		  for(int i=0; i < len; i++)
+		    printf("%2d: 0x%08x\n",
+			   i, data[i]);
+
+	      	}
+
+	    }
 
 	  if((nevents >= maxev) && (maxev != 0))
 	    break;
