@@ -23,6 +23,7 @@
  */
 #include <iostream>
 #include <stdint.h>
+#include <byteswap.h>
 #include "evioBlockParser.hxx"
 
 /**
@@ -324,12 +325,212 @@ evioBlockParser::leafNodeHandler(int bankLength, int containerType,
   return ((void *) NULL);
 }
 
+// Index the events in the slot bank
+// return number of events indexed
+
+uint8_t
+evioBlockParser::ParseJLabBank(uint8_t rocID, uint16_t bankID)
+{
+  uint8_t rval = 0;
+  int blkCounter = 0; /* count of blocks within the data (one per module) */
+  int endian = 0;
+
+  uint32_t *data;
+  Slot_t *currentSlot;
+
+  int32_t nwords = GetU32(rocID, bankID, &data);
+  /* Index the Bank of Data.
+     Looking for Block Headers, Event headers, and Block Trailers  */
+  int32_t iword = 0;
+  while(iword < nwords)
+    {
+      jlab_data_word_t jdata;
+
+      jdata.raw = data[iword];
+      if(endian)
+	jdata.raw = bswap_32(jdata.raw);
+
+      if(jdata.bf.data_type_defining == 1)
+	{
+	  switch(jdata.bf.data_type_tag)
+	    {
+	    case BLOCK_HEADER: /* 0: BLOCK HEADER */
+	      {
+		block_header_t bheader;
+		bheader.raw = jdata.raw;
+
+		blkCounter++; /* Increment local block counter */
+
+		currentSlot = &rocMap[rocID].bankMap[bankID].slotMap[bheader.bf.slot_number];
+		currentSlot->slotnumber = bheader.bf.slot_number;
+		currentSlot->blockheader[0] = bheader.raw;
+		currentSlot->nblockheader = 1;
+		currentSlot->evtCounter = 0;
+
+		// bankData[rocID][bankNumber].evtCounter = 0; /* Initialize the event counter */
+		// bankData[rocID][bankNumber].blkIndex[slotNumber] = iword;
+		// bankData[rocID][bankNumber].blkLevel   = bheader.bf.number_of_events_in_block;
+
+		EBP_DEBUG(SHOW_BLOCK_HEADER,
+			  "[%6d  0x%08x] "
+			  "BLOCK HEADER: slot %2d, block_number %3d, block_level %3d\n",
+			  iword,
+			  bheader.raw,
+			  bheader.bf.slot_number,
+			  bheader.bf.event_block_number,
+			  bheader.bf.number_of_events_in_block);
+		break;
+	      }
+
+	    case BLOCK_TRAILER: /* 1: BLOCK TRAILER */
+	      {
+		block_trailer_t btrailer;
+
+		btrailer.raw = jdata.raw;
+		currentSlot->blocktrailer = btrailer.raw;
+
+		EBP_DEBUG(SHOW_BLOCK_TRAILER,
+			  "[%6d  0x%08x] "
+			  "BLOCK TRAILER: slot %2d, nwords %d\n",
+			  iword,
+			  btrailer.raw,
+			  btrailer.bf.slot_number,
+			  btrailer.bf.words_in_block);
+
+#if 0
+		/* Obtain the previous event length */
+		// FIXME: figure this out carefully
+		if(bankData[rocID][bankNumber].evtCounter > 0)
+		  {
+		    current_event = bankData[rocID][bankNumber].evtCounter - 1;
+
+		    bankData[rocID][bankNumber].evtLength[slotNumber][current_event] =
+		      iword - bankData[rocID][bankNumber].evtIndex[slotNumber][current_event];
+		  }
+#endif
+		/* Check the slot number to make sure this block
+		   trailer is associated with the previous block
+		   header */
+		if(btrailer.bf.slot_number != currentSlot->slotnumber)
+		  {
+		    EBP_ERROR("[%6d  0x%08x] "
+			      "blockheader slot %d != blocktrailer slot %d\n",
+			      iword,
+			      btrailer.raw,
+			      currentSlot->slotnumber,
+			      btrailer.bf.slot_number);
+		    rval = -1;
+		  }
+
+#if 0
+		/* Check the number of words vs. words counted within the block */
+		// FIXME: not sure if I need this
+		if(btrailer.bf.words_in_block !=
+		   (iword - bankData[rocID][bankNumber].blkIndex[slotNumber]+1) )
+		  {
+		    EBP_ERROR("[%6d  0x%08x] "
+			   "trailer #words %d != actual #words %d\n",
+			   iword,
+			   btrailer.raw,
+			   btrailer.bf.words_in_block,
+			   iword-bankData[rocID][bankNumber].blkIndex[slotNumber]+1);
+		    rval = -1;
+		  }
+#endif
+
+		break;
+	      }
+
+	    case EVENT_HEADER: /* 2: EVENT HEADER */
+	      {
+		event_header_t eheader;
+		eheader.raw = jdata.raw;
+
+		EBP_DEBUG(SHOW_EVENT_HEADER,
+			  "[%6d  0x%08x] "
+			  "EVENT HEADER: trigger number %d\n",
+			  iword,
+			  eheader.raw,
+			  eheader.bf.event_number);
+
+		if(currentSlot->slotnumber == 0)
+		  {
+		    EBP_ERROR("Event Header Found. Slot Number = 0.\n");
+		    return -1;
+		  }
+
+		Event_t *currentEvent;
+		currentSlot->evtCounter++;
+		currentEvent = &currentSlot->eventMap[currentSlot->evtCounter];
+		currentEvent->index = iword;
+		currentEvent->payload = &data[iword];
+
+#if 0
+		/* Obtain the previous event length */
+		// FIXME: figure this out carefully
+		if(bankData[rocID][bankNumber].evtCounter > 0)
+		  {
+		    current_event = bankData[rocID][bankNumber].evtCounter - 1;
+
+		    bankData[rocID][bankNumber].evtLength[slotNumber][current_event] =
+		      iword - bankData[rocID][bankNumber].evtIndex[slotNumber][current_event];
+		  }
+
+		bankData[rocID][bankNumber].evtCounter++; /* increment event counter */
+		current_event = bankData[rocID][bankNumber].evtCounter - 1;
+		bankData[rocID][bankNumber].evtIndex[slotNumber][current_event] = iword;
+#endif
+
+		break;
+	      }
+
+	    default:
+	      /* Ignore all other data types for now */
+	      EBP_DEBUG(SHOW_OTHER,
+			"(%3d) OTHER: 0x%08x\n",iword,data[iword]);
+
+	    } /* switch(data_type) */
+
+	} /* if(jdata.bf.data_type_defining == 1) */
+
+      iword++;
+
+    } /* while(iword<nwords) */
+
+  return rval;
+}
+
 void
 evioBlockParser::ClearTriggerBank()
 {
   triggerBank.tag.raw = 0;
   triggerBank.nrocs = 0;
   triggerBank.roc.clear();
+}
+
+void
+evioBlockParser::ClearBankMap(uint8_t rocID)
+{
+  rocMap[rocID].bankMap.clear();
+}
+
+void
+evioBlockParser::ClearSlotMap(uint8_t rocID, uint16_t bankID)
+{
+  rocMap[rocID].bankMap[bankID].slotMap.clear();
+}
+
+void
+evioBlockParser::ClearEventMap(uint8_t rocID, uint16_t bankID, uint8_t slotID)
+{
+  rocMap[rocID].bankMap[bankID].slotMap[slotID].eventMap.clear();
+}
+
+void
+evioBlockParser::ClearMaps()
+{
+  ClearTriggerBank();
+  rocMap.clear();
 }
 
 

@@ -1,5 +1,4 @@
-#ifndef __EVIOBLOCKPARSER_HXX
-#define __EVIOBLOCKPARSER_HXX
+#pragma once
 /**
  *  Copyright (c) 2020        Southeastern Universities Research Association,
  *                            Thomas Jefferson National Accelerator Facility
@@ -190,6 +189,7 @@ class evioBlockParser:public evioStreamParserHandler
   {
     uint32_t index;			// points to event header
     uint32_t length;
+    uint32_t *payload;
   };
 
   struct Slot_t
@@ -198,6 +198,7 @@ class evioBlockParser:public evioStreamParserHandler
     uint8_t  nblockheader;
     uint32_t blockheader[2];
     uint32_t blocktrailer;
+    uint8_t evtCounter;
     map < uint8_t, Event_t > eventMap;
   };
 
@@ -244,6 +245,7 @@ public:
   ~evioBlockParser() {};
 
   void Parse(const uint32_t *buf);
+  uint8_t ParseJLabBank(uint8_t rocID, uint16_t bankID);
   void SetDebugMask(uint32_t mask) {debugMask = mask;};
 
   //
@@ -292,13 +294,13 @@ public:
   int32_t GetTriggerBankEvType(uint16_t **payload);
   int32_t GetTriggerBankRocData(uint8_t rocID, uint32_t **payload);
   vector<uint8_t> GetTriggerBankRocSegmentID();
+  void ClearMaps();
 
 
 private:
   // Main storage container
   map < uint8_t, Roc_t > rocMap;
   uint8_t blockLevel;
-
   TriggerBank_t triggerBank;
 
   // Handler for processing Banks of segments/banks
@@ -315,8 +317,9 @@ private:
 			const void *data, void *userArg);
 
   void ClearTriggerBank();
+  void ClearBankMap(uint8_t rocID);
+  void ClearSlotMap(uint8_t rocID, uint16_t bankID);
+  void ClearEventMap(uint8_t rocID, uint16_t bankID, uint8_t slotID);
   uint32_t debugMask;
 
 };
-
-#endif //__EVIOBLOCKPARSER_HXX
