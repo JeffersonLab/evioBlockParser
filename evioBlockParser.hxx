@@ -57,6 +57,7 @@ class evioBlockParser:public evioStreamParserHandler
       BLOCK_TRAILER  = 1,
       EVENT_HEADER   = 2,
       TRIGGER_TIME   = 3,
+      SCALER_HEADER  = 12,
       DATA_NOT_VALID = 14,
       FILLER         = 15
     };
@@ -120,6 +121,24 @@ class evioBlockParser:public evioStreamParserHandler
     uint32_t raw;
     event_header bf;
   };
+
+  // 12: SCALER
+  struct scaler_header
+  {
+    uint32_t number_scaler_words:6;
+    uint32_t undef:21;
+    uint32_t data_type_tag:4;
+    uint32_t data_type_defining:1;
+  };
+
+  union scaler_header_t
+  {
+    uint32_t raw;
+    scaler_header bf;
+  };
+
+
+
 
   // Range struct used to decode CODA Bank Tag
   struct range
@@ -285,6 +304,8 @@ public:
   vector<uint8_t> GetRocList();
   vector<uint16_t> GetBankList(uint8_t rocID);
   int32_t GetU32(uint8_t rocID, uint16_t bankID, uint32_t **payload);
+  int32_t GetU32(uint8_t rocID, uint16_t bankID, uint8_t slotID,
+		 uint8_t eventID, uint32_t **payload);
   int32_t GetU16(uint8_t rocID, uint16_t bankID, uint16_t **payload);
 
   bool CheckTriggerBank();

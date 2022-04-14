@@ -317,7 +317,7 @@ evioBlockParser::leafNodeHandler(int bankLength, int containerType,
 	  printf("%s: Ignored Content Type (0x%x) (%s) from parent tag 0x%x\n",
 		 __func__, contentType, DataTypeNames[contentType],
 		 parent.tag);
-	  printf("\n%-12s\n", (char *)data);
+	  // printf("\n%-12s\n", (char *)data);
 	}
 
     }
@@ -460,10 +460,10 @@ evioBlockParser::ParseJLabBank(uint8_t rocID, uint16_t bankID)
 		  }
 
 		Event_t *currentEvent;
-		currentSlot->evtCounter++;
 		currentEvent = &currentSlot->eventMap[currentSlot->evtCounter];
 		currentEvent->index = iword;
-		currentEvent->payload = &data[iword];
+		currentSlot->eventMap[currentSlot->evtCounter].payload = (uint32_t *)&data[iword+1];
+		currentSlot->evtCounter++;
 
 #if 0
 		/* Obtain the previous event length */
@@ -484,10 +484,52 @@ evioBlockParser::ParseJLabBank(uint8_t rocID, uint16_t bankID)
 		break;
 	      }
 
+	      /* Some known data types that include 32bit data */
+	    case SCALER_HEADER: /* 12: SCALER HEADER */
+	      {
+		scaler_header_t sheader;
+		sheader.raw = jdata.raw;
+		EBP_DEBUG(SHOW_OTHER,
+			  "[%6d  0x%08x] "
+			  "SCALER HEADER: number of scaler words %d\n",
+			  iword, data[iword],
+			  sheader.bf.number_scaler_words);
+
+		/* Skip over these to avoid confusion with data type headers */
+		iword += sheader.bf.number_scaler_words;
+		break;
+	      }
+
+	    case DATA_NOT_VALID: /* 14: DATA NOT VALID */
+	      {
+		EBP_DEBUG(SHOW_OTHER,
+			  "[%6d  0x%08x] "
+			  "DATA_NOT_VALID\n",
+			  iword,
+			  data[iword]);
+
+		break;
+	      }
+
+	    case FILLER: /* 15: FILLER */
+	      {
+		EBP_DEBUG(SHOW_OTHER,
+			  "[%6d  0x%08x] "
+			  "FILLER\n",
+			  iword,
+			  data[iword]);
+
+		break;
+	      }
+
 	    default:
 	      /* Ignore all other data types for now */
-	      EBP_DEBUG(SHOW_OTHER,
-			"(%3d) OTHER: 0x%08x\n",iword,data[iword]);
+		EBP_DEBUG(SHOW_OTHER,
+			  "[%6d  0x%08x] "
+			  "OTHER (%2d)\n",
+			  iword,
+			  data[iword],
+			  jdata.bf.data_type_tag);
 
 	    } /* switch(data_type) */
 
@@ -616,7 +658,6 @@ evioBlockParser::GetBankList(uint8_t rocID)
 
   if(Check(rocID))
     {
-      printf("rocID = %d\n", rocID);
       for(std::map<uint16_t,Bank_t>::iterator it = rocMap[rocID].bankMap.begin();
 	  it != rocMap[rocID].bankMap.end(); ++it)
 	{
@@ -640,6 +681,20 @@ evioBlockParser::GetU32(uint8_t rocID, uint16_t bankID, uint32_t **payload)
     {
       *payload = (uint32_t *)rocMap[rocID].bankMap[bankID].payload;
       rval = rocMap[rocID].bankMap[bankID].length;
+    }
+
+  return rval;
+}
+
+int32_t
+evioBlockParser::GetU32(uint8_t rocID, uint16_t bankID, uint8_t slotID,
+			uint8_t eventID, uint32_t **payload)
+{
+  int32_t rval = -1;
+  if(Check(rocID, bankID, slotID))
+    {
+      *payload = (uint32_t *)rocMap[rocID].bankMap[bankID].slotMap[slotID].eventMap[eventID].payload;
+      rval = rocMap[rocID].bankMap[bankID].slotMap[slotID].eventMap[eventID].length;
     }
 
   return rval;

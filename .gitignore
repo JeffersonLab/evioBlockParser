@@ -1,8 +1,3 @@
-# hackery to ignore files without an extention (executables, probably)
-*
-!*/
-!*.*
-
 # tmp emacs files
 *~
 
