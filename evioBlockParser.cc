@@ -376,6 +376,7 @@ evioBlockParser::ParseJLabBank(uint8_t rocID, uint16_t bankID, bool doByteSwap =
 			  bheader.bf.slot_number,
 			  bheader.bf.event_block_number,
 			  bheader.bf.number_of_events_in_block);
+		rval = bheader.bf.number_of_events_in_block;
 		break;
 	      }
 
@@ -394,20 +395,17 @@ evioBlockParser::ParseJLabBank(uint8_t rocID, uint16_t bankID, bool doByteSwap =
 			  btrailer.bf.slot_number,
 			  btrailer.bf.words_in_block);
 
-#if 0
-		/* Obtain the previous event length */
-		// FIXME: figure this out carefully
-		if(bankData[rocID][bankNumber].evtCounter > 0)
+		if(currentSlot->evtCounter > 0)
 		  {
-		    current_event = bankData[rocID][bankNumber].evtCounter - 1;
-
-		    bankData[rocID][bankNumber].evtLength[slotNumber][current_event] =
-		      iword - bankData[rocID][bankNumber].evtIndex[slotNumber][current_event];
+		    // Point to the previous Event
+		    Event_t *prevEvent = &currentSlot->eventMap[currentSlot->evtCounter - 1];
+		    // Calculate it's data length
+		    prevEvent->length = iword - prevEvent->index;
 		  }
-#endif
-		/* Check the slot number to make sure this block
-		   trailer is associated with the previous block
-		   header */
+
+		// Check the slot number to make sure this block
+		// trailer is associated with the previous block
+		// header
 		if(btrailer.bf.slot_number != currentSlot->slotnumber)
 		  {
 		    EBP_ERROR("[%6d  0x%08x] "
@@ -419,22 +417,17 @@ evioBlockParser::ParseJLabBank(uint8_t rocID, uint16_t bankID, bool doByteSwap =
 		    rval = -1;
 		  }
 
-#if 0
-		/* Check the number of words vs. words counted within the block */
-		// FIXME: not sure if I need this
-		if(btrailer.bf.words_in_block !=
-		   (iword - bankData[rocID][bankNumber].blkIndex[slotNumber]+1) )
+		// Check the number of words vs. words counted within the block
+		if(btrailer.bf.words_in_block != iword + 1)
 		  {
 		    EBP_ERROR("[%6d  0x%08x] "
 			   "trailer #words %d != actual #words %d\n",
 			   iword,
 			   btrailer.raw,
 			   btrailer.bf.words_in_block,
-			   iword-bankData[rocID][bankNumber].blkIndex[slotNumber]+1);
+			   iword+1);
 		    rval = -1;
 		  }
-#endif
-
 		break;
 	      }
 
@@ -458,44 +451,51 @@ evioBlockParser::ParseJLabBank(uint8_t rocID, uint16_t bankID, bool doByteSwap =
 		    return -1;
 		  }
 
-		Event_t *currentEvent;
-		currentEvent = &currentSlot->eventMap[currentSlot->evtCounter];
+		// Point to the current Event in this Slot's eventMap
+		Event_t *currentEvent = &currentSlot->eventMap[currentSlot->evtCounter];
 		currentEvent->index = iword;
 		currentSlot->eventMap[currentSlot->evtCounter].payload = (uint32_t *)&data[iword+1];
-		currentSlot->evtCounter++;
 
-#if 0
-		/* Obtain the previous event length */
-		// FIXME: figure this out carefully
-		if(bankData[rocID][bankNumber].evtCounter > 0)
+		if(currentSlot->evtCounter > 0)
 		  {
-		    current_event = bankData[rocID][bankNumber].evtCounter - 1;
-
-		    bankData[rocID][bankNumber].evtLength[slotNumber][current_event] =
-		      iword - bankData[rocID][bankNumber].evtIndex[slotNumber][current_event];
+		    // Point to the previous Event
+		    Event_t *prevEvent = &currentSlot->eventMap[currentSlot->evtCounter - 1];
+		    // Calculate it's data length
+		    prevEvent->length = iword - prevEvent->index;
 		  }
 
-		bankData[rocID][bankNumber].evtCounter++; /* increment event counter */
-		current_event = bankData[rocID][bankNumber].evtCounter - 1;
-		bankData[rocID][bankNumber].evtIndex[slotNumber][current_event] = iword;
-#endif
+		currentSlot->evtCounter++;
 
 		break;
 	      }
 
-	      /* Some known data types that include 32bit data */
 	    case SCALER_HEADER: /* 12: SCALER HEADER */
 	      {
-		scaler_header_t sheader;
-		sheader.raw = jdata.raw;
-		EBP_DEBUG(SHOW_OTHER,
+		// Here is some butter to help slide FADC250 data through the parser
+		// FIXME: think of a better way please
+		block_header_t bh; bh.raw = currentSlot->blockheader[0];
+		if(bh.bf.module_ID == JLAB_MODULE_FADC250)
+		  {
+		    scaler_header_t sheader;
+		    sheader.raw = jdata.raw;
+		    EBP_DEBUG(SHOW_OTHER,
 			  "[%6d  0x%08x] "
 			  "SCALER HEADER: number of scaler words %d\n",
 			  iword, data[iword],
 			  sheader.bf.number_scaler_words);
 
-		/* Skip over these to avoid confusion with data type headers */
-		iword += sheader.bf.number_scaler_words;
+		    // Skip over these to avoid confusion with data type headers
+		    iword += sheader.bf.number_scaler_words;
+		  }
+		else
+		  {
+		    EBP_DEBUG(SHOW_OTHER,
+			      "[%6d  0x%08x] "
+			      "OTHER (%2d)\n",
+			      iword,
+			      data[iword],
+			      jdata.bf.data_type_tag);
+		  }
 		break;
 	      }
 
@@ -533,6 +533,15 @@ evioBlockParser::ParseJLabBank(uint8_t rocID, uint16_t bankID, bool doByteSwap =
 	    } /* switch(data_type) */
 
 	} /* if(jdata.bf.data_type_defining == 1) */
+      else
+	{
+	  EBP_DEBUG(SHOW_OTHER,
+		    "[%6d  0x%08x] "
+		    "continued (%2d)\n",
+		    iword,
+		    data[iword],
+		    jdata.bf.data_type_tag);
+	}
 
       iword++;
 

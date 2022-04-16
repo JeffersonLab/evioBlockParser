@@ -93,12 +93,17 @@ main(int argc, char **argv)
 		  bool doByteSwap = (banklist[ibank] == 0x56) ? 1 : 0;
 
 		  len = p.ParseJLabBank(roclist[iroc], banklist[ibank], doByteSwap);
-
-		  len = p.GetU32(roclist[iroc], banklist[ibank], 21, 0, &data);
-		  len = 3;
-		  for(int i=0; i < len; i++)
-		    printf("%2d: 0x%08x\n",
-			   i, data[i]);
+		  printf(" roc: %x  bank: %x  blocklevel: %d\n",
+			 roclist[iroc], banklist[ibank], len);
+		  vector<uint8_t> slotlist = p.GetSlotList(roclist[iroc], banklist[ibank]);
+		  for(uint32_t islot = 0; islot < slotlist.size(); islot++)
+		    {
+		      len = p.GetU32(roclist[iroc], banklist[ibank], slotlist[islot], 0, &data);
+		      printf("slot %d  len = %d\n", slotlist[islot], len);
+		      for(int i=0; i < 3; i++)
+			printf("%2d: 0x%08x \n",
+			       i, data[i]);
+		    }
 	      	}
 
 	    }

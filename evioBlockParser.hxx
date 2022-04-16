@@ -62,6 +62,11 @@ class evioBlockParser:public evioStreamParserHandler
       FILLER         = 15
     };
 
+  enum jlabModuleIDs
+    {
+     JLAB_MODULE_FADC250 = 1
+    };
+
   struct jlab_data_word
   {
     uint32_t undef:27;
