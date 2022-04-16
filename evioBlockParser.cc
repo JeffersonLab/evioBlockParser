@@ -329,11 +329,10 @@ evioBlockParser::leafNodeHandler(int bankLength, int containerType,
 // return number of events indexed
 
 uint8_t
-evioBlockParser::ParseJLabBank(uint8_t rocID, uint16_t bankID)
+evioBlockParser::ParseJLabBank(uint8_t rocID, uint16_t bankID, bool doByteSwap = false)
 {
   uint8_t rval = 0;
   int blkCounter = 0; /* count of blocks within the data (one per module) */
-  int endian = 0;
 
   uint32_t *data;
   Slot_t *currentSlot;
@@ -347,7 +346,7 @@ evioBlockParser::ParseJLabBank(uint8_t rocID, uint16_t bankID)
       jlab_data_word_t jdata;
 
       jdata.raw = data[iword];
-      if(endian)
+      if(doByteSwap)
 	jdata.raw = bswap_32(jdata.raw);
 
       if(jdata.bf.data_type_defining == 1)
@@ -367,10 +366,8 @@ evioBlockParser::ParseJLabBank(uint8_t rocID, uint16_t bankID)
 		currentSlot->nblockheader = 1;
 		currentSlot->evtCounter = 0;
 
-		// bankData[rocID][bankNumber].evtCounter = 0; /* Initialize the event counter */
-		// bankData[rocID][bankNumber].blkIndex[slotNumber] = iword;
-		// bankData[rocID][bankNumber].blkLevel   = bheader.bf.number_of_events_in_block;
-
+		// Note: The Block header data type and slot number may be the only
+		// consistent information across different module formats.
 		EBP_DEBUG(SHOW_BLOCK_HEADER,
 			  "[%6d  0x%08x] "
 			  "BLOCK HEADER: slot %2d, block_number %3d, block_level %3d\n",
@@ -446,6 +443,8 @@ evioBlockParser::ParseJLabBank(uint8_t rocID, uint16_t bankID)
 		event_header_t eheader;
 		eheader.raw = jdata.raw;
 
+		// Note: The Event header data type and slot number may be the only
+		// consistent information across different module formats.
 		EBP_DEBUG(SHOW_EVENT_HEADER,
 			  "[%6d  0x%08x] "
 			  "EVENT HEADER: trigger number %d\n",
@@ -666,6 +665,28 @@ evioBlockParser::GetBankList(uint8_t rocID)
     }
 
   return retBanks;
+
+}
+
+/**
+ * Get a list of Slots for given rocID and bankID, in the parsed buffer
+ */
+
+vector<uint8_t>
+evioBlockParser::GetSlotList(uint8_t rocID, uint16_t bankID)
+{
+  vector<uint8_t> retSlots;
+
+  if(Check(rocID, bankID))
+    {
+      for(std::map<uint8_t,Slot_t>::iterator it = rocMap[rocID].bankMap[bankID].slotMap.begin();
+	  it != rocMap[rocID].bankMap[bankID].slotMap.end(); ++it)
+	{
+	  retSlots.push_back(it->first);
+	}
+    }
+
+  return retSlots;
 
 }
 

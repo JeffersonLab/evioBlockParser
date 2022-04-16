@@ -49,6 +49,7 @@ main(int argc, char **argv)
 	  evioBlockParser p;
 	  p.SetDebugMask(0xffff &~ evioBlockParser::SHOW_NODE_FOUND);
 
+	  p.ClearMaps();
 	  p.Parse(buf);
 
 	  uint16_t evtag; int32_t evtag_len;
@@ -73,25 +74,31 @@ main(int argc, char **argv)
 
 	  roclist = p.GetRocList();
 
-	  printf("roclist size = %d\n", roclist.size());
-	  for(int i=0; i < roclist.size(); i++)
-	    {
-	      printf("%4d: 0x%x\n", i, roclist[i]);
+	  cout << "roclist size = " << roclist.size() << endl;
 
-	      banklist = p.GetBankList(roclist[i]);
-	      printf("\tbanklist size = %d\n", banklist.size());
-	      for(int j = 0; j < banklist.size(); j++)
+	  for(uint32_t iroc=0; iroc < roclist.size(); iroc++)
+	    {
+	      printf("%4d: rocID = 0x%x\n", iroc, roclist[iroc]);
+
+	      banklist = p.GetBankList(roclist[iroc]);
+	      cout << "\tbanklist size = " << banklist.size() << endl;
+	      for(uint32_t ibank = 0; ibank < banklist.size(); ibank++)
 	      	{
-	      	  printf("\t%4d: 0x%x\n", j, banklist[j]);
 
 		  uint32_t *data;
 		  int len = 0;
-		  len = p.GetU32(roclist[i], banklist[j], &data);
-		  printf(" len = %d \n", len);
+		  len = p.GetU32(roclist[iroc], banklist[ibank], &data);
+	      	  printf("\t%4d: bank 0x%02x  size = %8d\n", ibank, banklist[ibank], len);
+
+		  bool doByteSwap = (banklist[ibank] == 0x56) ? 1 : 0;
+
+		  len = p.ParseJLabBank(roclist[iroc], banklist[ibank], doByteSwap);
+
+		  len = p.GetU32(roclist[iroc], banklist[ibank], 21, 0, &data);
+		  len = 3;
 		  for(int i=0; i < len; i++)
 		    printf("%2d: 0x%08x\n",
 			   i, data[i]);
-
 	      	}
 
 	    }

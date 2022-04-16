@@ -264,7 +264,7 @@ public:
   ~evioBlockParser() {};
 
   void Parse(const uint32_t *buf);
-  uint8_t ParseJLabBank(uint8_t rocID, uint16_t bankID);
+  uint8_t ParseJLabBank(uint8_t rocID, uint16_t bankID, bool doByteSwap);
   void SetDebugMask(uint32_t mask) {debugMask = mask;};
 
   //
@@ -303,6 +303,7 @@ public:
 
   vector<uint8_t> GetRocList();
   vector<uint16_t> GetBankList(uint8_t rocID);
+  vector<uint8_t>  GetSlotList(uint8_t rocID, uint16_t bankID);
   int32_t GetU32(uint8_t rocID, uint16_t bankID, uint32_t **payload);
   int32_t GetU32(uint8_t rocID, uint16_t bankID, uint8_t slotID,
 		 uint8_t eventID, uint32_t **payload);
