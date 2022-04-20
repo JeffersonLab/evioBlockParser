@@ -25,12 +25,18 @@ A C++ Class for EVIO to index events in a block of module data.
 
 ** Get Trigger Bank data and Block Level
 #+begin_src C
-  uint16_t evtag; int32_t evtag_len;
-  evtag_len = p.GetTriggerBankEvTag(&evtag);
+  // Trigger Bank Tag (what type of trigger bank data is provided)
+  uint16_t tbtag; int32_t tbtag_len;
+  tbtag_len = p.GetTriggerBankEvTag(&tbtag);
 
-  // The blockLevel is equal to the number of Event Type Tags
+  // Trigger Event Type
+  uint16_t *evtype; int32_t evtype_len;
+  evtype_len = p.GetTriggerBankEvType(&evtype);
+
+  // The blockLevel is equal to the number of Event Types in the trigger bank
   int32_t blockLevel = evtag_len;
 
+  // Trigger Timestamp
   uint64_t *evtimestamp; int32_t evtimestamp_len;
   evtimestamp_len = p.GetTriggerBankTimestamp(&evtimestamp);
 #+end_src
@@ -60,7 +66,7 @@ A C++ Class for EVIO to index events in a block of module data.
 
 ** Loop through events in the block 
 #+begin_src C
-  for(uint32_t ievevent = 0; ievent < blockLevel; ievent++)
+  for(uint32_t ievent = 0; ievent < blockLevel; ievent++)
     {
       int32_t len;
       uint32_t *evbuffer;
@@ -88,7 +94,6 @@ A C++ Class for EVIO to index events in a block of module data.
                  uint8_t eventID, uint32_t **payload);
   int32_t GetU16(uint8_t rocID, uint16_t bankID, uint16_t **payload);
 
-  int32_t GetTriggerBankEvTag(uint16_t *evtag);
   int32_t GetTriggerBankTimestamp(uint64_t **payload);
   int32_t GetTriggerBankEvType(uint16_t **payload);
   int32_t GetTriggerBankRocData(uint8_t rocID, uint32_t **payload);
