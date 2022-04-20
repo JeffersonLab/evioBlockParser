@@ -1,0 +1,97 @@
+#+title: evioBlockParser
+
+Author:
+- Bryan Moffit
+  - TJNAF Fast Electronics and Data Acquisition
+
+* What is this for?
+A C++ Class for EVIO to index events in a block of module data.
+
+* What do I do with it?
+
+** Obtain a buffer from EVIO
+#+begin_src C
+  uint32_t *buf, bufLen;
+  evioFileChannel *chan = evioFileChannel("important_thesis_data.evio","r");
+
+  chan->readAlloc(&buf, &bufLen)
+#+end_src
+
+** Declare an evioBlockParser object and pass it the buffer
+#+begin_src C
+  evioBlockParser p;
+  p.Parse(buf);
+#+end_src
+
+** Get Trigger Bank data and Block Level
+#+begin_src C
+  uint16_t evtag; int32_t evtag_len;
+  evtag_len = p.GetTriggerBankEvTag(&evtag);
+
+  // The blockLevel is equal to the number of Event Type Tags
+  int32_t blockLevel = evtag_len;
+
+  uint64_t *evtimestamp; int32_t evtimestamp_len;
+  evtimestamp_len = p.GetTriggerBankTimestamp(&evtimestamp);
+#+end_src
+
+** Get list of ROCs
+#+begin_src C
+  vector<uint8_t> roclist = p.GetRocList();
+#+end_src
+
+** Get a list of Banks in a ROC
+#+begin_src C
+  uint32_t iroc = 0;
+  vector<uint16_t> banklist = p.GetBankList(roclist[iroc]);
+#+end_src
+
+** Parse a Bank for Events (false = no byteswap)
+#+begin_src C
+  int32_t len;
+  uint32_t ibank = 0;
+  len = p.ParseJLabBank(roclist[iroc], banklist[ibank], false);
+#+end_src
+
+** Get a list of slots from Parsed Bank
+#+begin_src C
+  vector<uint8_t> slotlist = p.GetSlotList(roclist[iroc], banklist[ibank]);
+#+end_src
+
+** Loop through events in the block 
+#+begin_src C
+  for(uint32_t ievevent = 0; ievent < blockLevel; ievent++)
+    {
+      int32_t len;
+      uint32_t *evbuffer;
+
+      uint8_t rocID = 1;
+      uint16_t bankID = 3;
+      uint8_t slot = 3;
+
+      len = p.GetU32(rocID, bankID, slot, ievent, &evbuffer);
+
+      // Do something with the event data
+      // evbuffer will point to the event header of the ievent^th event in the block
+      // len with be the length of the buffer to analyze
+      for(uint32_t idata = 0; idata < len; idata++)
+        {
+          fadcDataDecode(evbuffer[idata]);
+        }
+    }
+#+end_src
+
+** Other useful Data Access routines
+#+begin_src C
+  int32_t GetU32(uint8_t rocID, uint16_t bankID, uint32_t **payload);
+  int32_t GetU32(uint8_t rocID, uint16_t bankID, uint8_t slotID,
+                 uint8_t eventID, uint32_t **payload);
+  int32_t GetU16(uint8_t rocID, uint16_t bankID, uint16_t **payload);
+
+  int32_t GetTriggerBankEvTag(uint16_t *evtag);
+  int32_t GetTriggerBankTimestamp(uint64_t **payload);
+  int32_t GetTriggerBankEvType(uint16_t **payload);
+  int32_t GetTriggerBankRocData(uint8_t rocID, uint32_t **payload);
+  vector<uint8_t> GetTriggerBankRocSegmentID();
+#+end_src
+
